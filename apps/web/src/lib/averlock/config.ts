@@ -17,7 +17,9 @@ export const contracts = {
   guardManager: publicAddress(process.env.NEXT_PUBLIC_AVERLOCK_GUARD_MANAGER, "0x444947Aaa00aB3fddbeb6421244A160448E6B52D"),
   protectionVault: publicAddress(process.env.NEXT_PUBLIC_AVERLOCK_PROTECTION_VAULT, "0xCcF6D8A6AA0F3799f6c9c6069289D4013aABF4Eb"),
   priceReader: publicAddress(process.env.NEXT_PUBLIC_AVERLOCK_PRICE_READER, "0xf2F2bf463b0765729189DeBe4E22dCEd601A18d5"),
-  paymentVerifier: publicAddress(process.env.NEXT_PUBLIC_AVERLOCK_PAYMENT_VERIFIER, "0x10B2419e526Dc860E85c2315536389FA0D1269DA"),
+  // These are immutable Coston2 deployment bindings. Keeping them in source prevents a
+  // stale NEXT_PUBLIC build argument from silently changing a security-critical read.
+  paymentVerifier: "0x10B2419e526Dc860E85c2315536389FA0D1269DA" as Address,
   ftestXrp: publicAddress(process.env.NEXT_PUBLIC_AVERLOCK_FTEST_XRP, "0x0b6A3645c240605887a5532109323A3E12273dc7"),
   teeManager: publicAddress(process.env.NEXT_PUBLIC_FLARE_TEE_MANAGER, "0x1a9C4A0f9D76c0b1D91d22E24E573a9b377618aE"),
   currentTee: process.env.NEXT_PUBLIC_AVERLOCK_TEE_ID as Address | undefined,
@@ -37,7 +39,7 @@ export const fccConfig = {
  */
 export const dashboardSelection = {
   ruleId: (process.env.NEXT_PUBLIC_AVERLOCK_RULE_ID || "0x2a3a9591def2b67120f829c342d002de5e2def49ac0f4044a6be143071489400") as Hex,
-  eventHash: (process.env.NEXT_PUBLIC_AVERLOCK_EVENT_HASH || "0xc4d12008caea289e8809d9f2884522ed85aac29600e43d1f07a566c896514819") as Hex,
+  eventHash: "0xc4d12008caea289e8809d9f2884522ed85aac29600e43d1f07a566c896514819" as Hex,
   actionId: (process.env.NEXT_PUBLIC_AVERLOCK_ACTION_ID || "0x9dc08cf157b56885ffef6a30f5fc9ff56f74c3aad1b163844bba07a84ed74a63") as Hex,
   positionId: BigInt(process.env.NEXT_PUBLIC_AVERLOCK_POSITION_ID || "1"),
   registrationBlock: BigInt(process.env.NEXT_PUBLIC_AVERLOCK_REGISTRATION_BLOCK || "33660559"),

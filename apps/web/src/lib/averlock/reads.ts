@@ -17,13 +17,12 @@ export async function readDashboard(owner: Address): Promise<DashboardData | nul
   const { ruleId, eventHash, actionId, positionId, registrationBlock, executionBlock } = dashboardSelection;
 
   // Required security state. Failure here correctly fails the dashboard closed.
-  const [chainId, guardRaw, snapshotRaw, eventConsumed, resultConsumed, positionCount, managerTokenBalance, extensionId, resultDomain] = await Promise.all([
+  const [chainId, guardRaw, snapshotRaw, eventConsumed, resultConsumed, managerTokenBalance, extensionId, resultDomain] = await Promise.all([
     publicClient.getChainId(),
     publicClient.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "getGuard", args: [ruleId] }),
     publicClient.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "getEvaluationSnapshot", args: [eventHash] }),
     publicClient.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "isEventConsumed", args: [eventHash] }),
     publicClient.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "isResultConsumed", args: [actionId] }),
-    publicClient.readContract({ address: contracts.protectionVault, abi: vaultAbi, functionName: "positionCount" }),
     publicClient.readContract({ address: contracts.ftestXrp, abi: erc20Abi, functionName: "balanceOf", args: [contracts.guardManager] }),
     publicClient.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "extensionId" }),
     publicClient.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "GUARD_RESULT_DOMAIN" }),
@@ -34,6 +33,10 @@ export async function readDashboard(owner: Address): Promise<DashboardData | nul
   const snapshot = snapshotRaw as EvaluationSnapshot;
   if (getAddress(guard.owner) !== getAddress(owner)) return null;
   if (guard.ruleId !== ruleId || snapshot.ruleId !== ruleId) throw new Error("Configured guard selectors do not match required onchain state");
+
+  // A vault is created only by a triggered decision. Its absence, or an RPC failure
+  // while reading optional vault state, must not invalidate the completed decision.
+  const positionCount = await optional("ProtectionVault.positionCount", () => publicClient.readContract({ address: contracts.protectionVault, abi: vaultAbi, functionName: "positionCount" })) ?? 0n;
 
   // Receipt-anchored log reads remain useful evidence, but never take down core state.
   const [registrations, preparedLogs, evaluatedLogs, triggeredLogs, livePrice] = await Promise.all([
@@ -50,7 +53,8 @@ export async function readDashboard(owner: Address): Promise<DashboardData | nul
 
   let position: VaultPosition | undefined;
   let claimable = 0n, remainingLocked = 0n, fullyVested = false;
-  if (positionCount >= positionId) {
+  const decisionTriggered = evaluated?.args.triggered ?? Boolean(triggered);
+  if (decisionTriggered && positionCount >= positionId) {
     const positionReads = await Promise.all([
       optional("ProtectionVault.getPosition", () => publicClient.readContract({ address: contracts.protectionVault, abi: vaultAbi, functionName: "getPosition", args: [positionId] })),
       optional("ProtectionVault.claimableAmount", () => publicClient.readContract({ address: contracts.protectionVault, abi: vaultAbi, functionName: "claimableAmount", args: [positionId] })),
@@ -78,7 +82,7 @@ export async function readDashboard(owner: Address): Promise<DashboardData | nul
 
   return {
     guard, snapshot, eventHash, eventConsumed, actionId,
-    decisionTriggered: evaluated?.args.triggered ?? Boolean(triggered), resultConsumed, position, positionCount,
+    decisionTriggered, resultConsumed, position, positionCount,
     claimable, remainingLocked, fullyVested, managerTokenBalance, livePriceUsd18: livePrice?.[0], livePriceTimestamp: livePrice?.[1],
     extensionId, resultDomain, tee,
     transactions: { registration: registration?.transactionHash, preparation: prepared?.transactionHash, evaluation: evaluated?.transactionHash, execution: triggered?.transactionHash },
