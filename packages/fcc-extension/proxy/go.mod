@@ -4,7 +4,7 @@ go 1.25.1
 
 require (
 	github.com/ethereum/go-ethereum v1.17.4
-	golang.org/x/term v0.40.0
+	golang.org/x/term v0.43.0
 )
 
 require (
@@ -19,7 +19,7 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/holiman/uint256 v1.3.2 // indirect
 	github.com/supranational/blst v0.3.16 // indirect
-	golang.org/x/crypto v0.48.0 // indirect
+	golang.org/x/crypto v0.52.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
-	golang.org/x/sys v0.41.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
 )
