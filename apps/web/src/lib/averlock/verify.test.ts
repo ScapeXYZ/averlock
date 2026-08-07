@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { keccak256, stringToHex, type Address, type Hex } from "viem";
-import { contracts } from "./config";
+import { contracts, dashboardSelection } from "./config";
+import { withReadTimeout } from "./read-timeout";
 import { readVerification, resolveVerificationRule, verifyViewContainsPrivateData } from "./verify";
 import type { EvaluationSnapshot, GuardRecord, VaultPosition } from "./types";
 
@@ -24,4 +25,6 @@ describe("public verification", () => {
   it("never contains private policy data", async () => { const { client } = mock({ execute: true }); const data = await readVerification(ruleId, executed, client as never); expect(verifyViewContainsPrivateData(data)).toBe(false); });
   it("uses only exact receipt blocks", async () => { const { client, ranges } = mock({ execute: true }); await readVerification(ruleId, executed, client as never); expect(ranges.every(([from,to]) => from === to)).toBe(true); });
   it("resolves only known transaction receipts", () => { expect(resolveVerificationRule(tx, [{ ruleId, registrationBlock: "1", transactionHash: tx, owner }])).toBe(ruleId); expect(resolveVerificationRule("999", [])).toBeUndefined(); });
+  it("resolves the configured rule, event, and position identifiers", () => { expect(resolveVerificationRule(dashboardSelection.ruleId, [])).toBe(dashboardSelection.ruleId); expect(resolveVerificationRule(dashboardSelection.eventHash, [])).toBe(dashboardSelection.ruleId); expect(resolveVerificationRule(dashboardSelection.positionId.toString(), [])).toBe(dashboardSelection.ruleId); });
+  it("bounds a stalled required verification operation", async () => { await expect(withReadTimeout(new Promise<never>(() => undefined), "Required read", 1)).rejects.toThrow(/Required read did not respond/); });
 });
