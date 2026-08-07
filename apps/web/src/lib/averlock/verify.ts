@@ -2,6 +2,7 @@ import { getAddress, type Address, type Hex } from "viem";
 import { configuredDetailAnchor, isValidGuardRuleId, readGuardDetail } from "./guard-detail";
 import { contracts, dashboardSelection, fccConfig, publicClient, publicProofMetadata } from "./config";
 import { priceReaderAbi, teeManagerAbi } from "./contracts";
+import { withReadTimeout } from "./read-timeout";
 import type { GuardIndexEntry } from "./guard-index";
 import type { GuardDetailAnchor, GuardDetailData } from "./types";
 
@@ -26,18 +27,18 @@ export function verificationAnchor(ruleId: Hex, owner?: Address, entries: GuardI
   return { ...configured, owner, registrationBlock: indexed ? BigInt(indexed.registrationBlock) : configured.registrationBlock, registrationTransaction: indexed?.transactionHash || configured.registrationTransaction };
 }
 
-export async function readVerification(ruleId: Hex, anchor: GuardDetailAnchor, client: VerifyClient = publicClient): Promise<VerifyData> {
+export async function readVerification(ruleId: Hex, anchor: GuardDetailAnchor, client: VerifyClient = publicClient, timeoutMs = 20_000): Promise<VerifyData> {
   const detail = await readGuardDetail(ruleId, anchor, client);
   const optionalErrors = [...detail.optionalErrors];
   let livePriceUsd18: bigint | undefined; let livePriceTimestamp: bigint | undefined;
-  try { [livePriceUsd18, livePriceTimestamp] = await client.readContract({ address: contracts.priceReader, abi: priceReaderAbi, functionName: "getXrpUsdPriceUsd18" }); } catch { optionalErrors.push("Current FTSO price unavailable"); }
+  try { [livePriceUsd18, livePriceTimestamp] = await withReadTimeout(client.readContract({ address: contracts.priceReader, abi: priceReaderAbi, functionName: "getXrpUsdPriceUsd18" }), "Current FTSO price", timeoutMs); } catch { optionalErrors.push("Current FTSO price unavailable"); }
   let tee: VerifyData["tee"];
   if (contracts.currentTee) {
     try {
       const [machine, status, extensionId] = await Promise.all([
-        client.readContract({ address: contracts.teeManager, abi: teeManagerAbi, functionName: "getTeeMachine", args: [contracts.currentTee] }),
-        client.readContract({ address: contracts.teeManager, abi: teeManagerAbi, functionName: "getTeeMachineStatus", args: [contracts.currentTee] }),
-        client.readContract({ address: contracts.teeManager, abi: teeManagerAbi, functionName: "getExtensionId", args: [contracts.currentTee] }),
+        withReadTimeout(client.readContract({ address: contracts.teeManager, abi: teeManagerAbi, functionName: "getTeeMachine", args: [contracts.currentTee] }), "TEE machine metadata", timeoutMs),
+        withReadTimeout(client.readContract({ address: contracts.teeManager, abi: teeManagerAbi, functionName: "getTeeMachineStatus", args: [contracts.currentTee] }), "TEE machine status", timeoutMs),
+        withReadTimeout(client.readContract({ address: contracts.teeManager, abi: teeManagerAbi, functionName: "getExtensionId", args: [contracts.currentTee] }), "TEE extension ID", timeoutMs),
       ]);
       if (getAddress(machine.teeId) !== getAddress(contracts.currentTee) || extensionId !== fccConfig.extensionId || status !== 2) throw new Error("TEE/extension binding mismatch.");
       tee = { id: machine.teeId, proxy: machine.teeProxyId, url: machine.url, status, extensionId };

@@ -1,6 +1,7 @@
 import { getAddress, isHex, keccak256, stringToHex, zeroAddress, zeroHash, type Address, type Hex } from "viem";
 import { contracts, coston2, dashboardSelection, fccConfig, publicClient } from "./config";
 import { guardEvaluatedEvent, guardManagerAbi, guardRegisteredEvent, guardTriggeredEvent, vaultAbi } from "./contracts";
+import { withReadTimeout } from "./read-timeout";
 import type { EvaluationSnapshot, GuardDetailAnchor, GuardDetailData, GuardLifecycleStage, GuardRecord, VaultPosition } from "./types";
 
 type DetailClient = Pick<typeof publicClient, "getChainId" | "readContract" | "getLogs">;
@@ -31,14 +32,14 @@ export function configuredDetailAnchor(ruleId: Hex): GuardDetailAnchor | undefin
 
 export async function readGuardDetail(ruleId: Hex, anchor: GuardDetailAnchor = {}, client: DetailClient = publicClient): Promise<GuardDetailData> {
   const [chainId, guardRaw, vault, paymentVerifier, priceReader, fxrp, extensionId, resultDomain] = await Promise.all([
-    client.getChainId(),
-    client.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "getGuard", args: [ruleId] }),
-    client.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "protectionVault" }),
-    client.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "paymentVerifier" }),
-    client.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "priceReader" }),
-    client.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "fxrp" }),
-    client.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "extensionId" }),
-    client.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "GUARD_RESULT_DOMAIN" }),
+    withReadTimeout(client.getChainId(), "Coston2 chain ID"),
+    withReadTimeout(client.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "getGuard", args: [ruleId] }), "GuardManager.getGuard"),
+    withReadTimeout(client.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "protectionVault" }), "GuardManager.protectionVault"),
+    withReadTimeout(client.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "paymentVerifier" }), "GuardManager.paymentVerifier"),
+    withReadTimeout(client.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "priceReader" }), "GuardManager.priceReader"),
+    withReadTimeout(client.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "fxrp" }), "GuardManager.fxrp"),
+    withReadTimeout(client.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "extensionId" }), "GuardManager.extensionId"),
+    withReadTimeout(client.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "GUARD_RESULT_DOMAIN" }), "GuardManager.GUARD_RESULT_DOMAIN"),
   ]);
   if (chainId !== coston2.id) throw new Error(`Wrong chain: expected Coston2 114, received ${chainId}.`);
   const guard = guardRaw as GuardRecord;
@@ -55,7 +56,7 @@ export async function readGuardDetail(ruleId: Hex, anchor: GuardDetailAnchor = {
   const optionalErrors: string[] = [];
   if (anchor.registrationBlock !== undefined) {
     try {
-      const registrations = await client.getLogs({ address: contracts.guardManager, event: guardRegisteredEvent, args: { ruleId }, fromBlock: anchor.registrationBlock, toBlock: anchor.registrationBlock });
+      const registrations = await withReadTimeout(client.getLogs({ address: contracts.guardManager, event: guardRegisteredEvent, args: { ruleId }, fromBlock: anchor.registrationBlock, toBlock: anchor.registrationBlock }), "GuardRegistered receipt");
       const registration = registrations.find((log) => sameHex(log.args.ruleId, ruleId));
       if (!registration) throw new Error("receipt-anchored GuardRegistered event missing");
       if (getAddress(registration.args.owner!) !== getAddress(guard.owner) || !sameHex(registration.args.policyCommitment, guard.policyCommitment) || !sameHex(registration.args.monitoredReceiverHash, guard.monitoredReceiverHash) || registration.args.scheduleId !== guard.scheduleId) throw new Error("Guard registration event binding mismatch.");
@@ -71,11 +72,11 @@ export async function readGuardDetail(ruleId: Hex, anchor: GuardDetailAnchor = {
   let eventConsumed: boolean | undefined;
   if (anchor.eventHash) {
     try {
-      const raw = await client.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "getEvaluationSnapshot", args: [anchor.eventHash] }) as EvaluationSnapshot;
+      const raw = await withReadTimeout(client.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "getEvaluationSnapshot", args: [anchor.eventHash] }), "GuardManager.getEvaluationSnapshot") as EvaluationSnapshot;
       if (availableSnapshot(raw)) {
         if (!sameHex(raw.ruleId, guard.ruleId)) throw new Error("Guard snapshot rule binding mismatch.");
         snapshot = raw;
-        eventConsumed = await client.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "isEventConsumed", args: [anchor.eventHash] });
+        eventConsumed = await withReadTimeout(client.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "isEventConsumed", args: [anchor.eventHash] }), "GuardManager.isEventConsumed");
       }
     } catch (error) {
       if (error instanceof Error && /binding mismatch|transaction mismatch/.test(error.message)) throw error;
@@ -91,15 +92,15 @@ export async function readGuardDetail(ruleId: Hex, anchor: GuardDetailAnchor = {
   if (anchor.executionBlock !== undefined && anchor.eventHash) {
     try {
       const [evaluations, triggers] = await Promise.all([
-        client.getLogs({ address: contracts.guardManager, event: guardEvaluatedEvent, args: { owner: guard.owner, ruleId, eventHash: anchor.eventHash }, fromBlock: anchor.executionBlock, toBlock: anchor.executionBlock }),
-        client.getLogs({ address: contracts.guardManager, event: guardTriggeredEvent, args: { owner: guard.owner, ruleId, eventHash: anchor.eventHash }, fromBlock: anchor.executionBlock, toBlock: anchor.executionBlock }),
+        withReadTimeout(client.getLogs({ address: contracts.guardManager, event: guardEvaluatedEvent, args: { owner: guard.owner, ruleId, eventHash: anchor.eventHash }, fromBlock: anchor.executionBlock, toBlock: anchor.executionBlock }), "GuardEvaluated receipt"),
+        withReadTimeout(client.getLogs({ address: contracts.guardManager, event: guardTriggeredEvent, args: { owner: guard.owner, ruleId, eventHash: anchor.eventHash }, fromBlock: anchor.executionBlock, toBlock: anchor.executionBlock }), "GuardTriggered receipt"),
       ]);
       const evaluated = evaluations.at(-1); const triggered = triggers.at(-1);
       if (evaluated) {
         const evaluatedActionId = evaluated.args.actionId!;
         if (actionId && !sameHex(actionId, evaluatedActionId)) throw new Error("Guard result action binding mismatch.");
         actionId = evaluatedActionId; decisionTriggered = evaluated.args.triggered;
-        resultConsumed = await client.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "isResultConsumed", args: [evaluatedActionId] });
+        resultConsumed = await withReadTimeout(client.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "isResultConsumed", args: [evaluatedActionId] }), "GuardManager.isResultConsumed");
         if (anchor.executionTransaction && !sameHex(anchor.executionTransaction, evaluated.transactionHash)) throw new Error("Guard execution transaction mismatch.");
         executionTransaction = evaluated.transactionHash;
       }
@@ -113,10 +114,10 @@ export async function readGuardDetail(ruleId: Hex, anchor: GuardDetailAnchor = {
   let position: VaultPosition | undefined; let claimable: bigint | undefined; let remainingLocked: bigint | undefined; let fullyVested: boolean | undefined;
   if (positionId !== undefined) {
     const [raw, claimableRaw, lockedRaw, vestedRaw] = await Promise.all([
-      client.readContract({ address: contracts.protectionVault, abi: vaultAbi, functionName: "getPosition", args: [positionId] }),
-      client.readContract({ address: contracts.protectionVault, abi: vaultAbi, functionName: "claimableAmount", args: [positionId] }),
-      client.readContract({ address: contracts.protectionVault, abi: vaultAbi, functionName: "remainingLockedAmount", args: [positionId] }),
-      client.readContract({ address: contracts.protectionVault, abi: vaultAbi, functionName: "isFullyVested", args: [positionId] }),
+      withReadTimeout(client.readContract({ address: contracts.protectionVault, abi: vaultAbi, functionName: "getPosition", args: [positionId] }), "ProtectionVault.getPosition"),
+      withReadTimeout(client.readContract({ address: contracts.protectionVault, abi: vaultAbi, functionName: "claimableAmount", args: [positionId] }), "ProtectionVault.claimableAmount"),
+      withReadTimeout(client.readContract({ address: contracts.protectionVault, abi: vaultAbi, functionName: "remainingLockedAmount", args: [positionId] }), "ProtectionVault.remainingLockedAmount"),
+      withReadTimeout(client.readContract({ address: contracts.protectionVault, abi: vaultAbi, functionName: "isFullyVested", args: [positionId] }), "ProtectionVault.isFullyVested"),
     ]);
     position = raw as VaultPosition;
     if (position.id !== positionId || getAddress(position.beneficiary) !== getAddress(guard.owner) || getAddress(position.asset) !== getAddress(contracts.ftestXrp)) throw new Error("ProtectionVault beneficiary or asset binding mismatch.");

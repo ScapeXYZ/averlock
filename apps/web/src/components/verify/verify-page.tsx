@@ -13,19 +13,27 @@ import { devError, userFacingError } from "@/lib/averlock/errors";
 const explorer = coston2.blockExplorers.default.url; const xrplExplorer = "https://testnet.xrpl.org/transactions";
 export function VerifyPage() {
   const { address, chainId, isConnected } = useAccount(); const { switchChain } = useSwitchChain();
-  const [query, setQuery] = useState<string>(dashboardSelection.ruleId); const [selectedRule, setSelectedRule] = useState<Hex>(dashboardSelection.ruleId); const [data, setData] = useState<VerifyData>(); const [error, setError] = useState(""); const [selectedNode, setSelectedNode] = useState<VerificationNode>();
+  const [query, setQuery] = useState<string>(dashboardSelection.ruleId); const [selectedRule, setSelectedRule] = useState<Hex>(dashboardSelection.ruleId); const [data, setData] = useState<VerifyData>(); const [error, setError] = useState(""); const [loading, setLoading] = useState(true); const [selectedNode, setSelectedNode] = useState<VerificationNode>();
   const entries = useMemo(() => address ? loadGuardIndex(address) : [], [address]);
   useEffect(() => {
     if (isConnected && chainId !== coston2.id) return;
     let cancelled = false;
-    readVerification(selectedRule, verificationAnchor(selectedRule, undefined, entries)).then((value) => { if (!cancelled) setData(value); }).catch((cause) => { devError("proof verification", cause); if (!cancelled) setError(userFacingError(cause, "Public proof verification could not be completed safely.")); });
+    void (async () => {
+      // Yield once so dependency-driven resets are not synchronous effect updates.
+      await Promise.resolve();
+      if (cancelled) return;
+      setLoading(true); setError(""); setData(undefined);
+      try { const value = await readVerification(selectedRule, verificationAnchor(selectedRule, undefined, entries)); if (!cancelled) setData(value); }
+      catch (cause) { devError("proof verification", cause); if (!cancelled) setError(userFacingError(cause, "Public proof verification could not be completed safely.")); }
+      finally { if (!cancelled) setLoading(false); }
+    })();
     return () => { cancelled = true; };
   }, [chainId, entries, isConnected, selectedRule]);
-  function inspect(event: React.FormEvent) { event.preventDefault(); const resolved = resolveVerificationRule(query, entries); if (!resolved) { setData(undefined); setError("No receipt-backed guard matches that rule, event, position, or transaction identifier."); return; } setError(""); setData(undefined); setSelectedRule(resolved); }
+  function inspect(event: React.FormEvent) { event.preventDefault(); const resolved = resolveVerificationRule(query, entries); if (!resolved) { setLoading(false); setData(undefined); setError("No receipt-backed guard matches that rule, event, position, or transaction identifier."); return; } setError(""); setData(undefined); setLoading(true); setSelectedRule(resolved); }
   if (isConnected && chainId !== coston2.id) return <main className="verify-page"><State title="Coston2 required" body="Verification fails closed when the connected wallet is on another chain."><button className="primary-button" onClick={() => switchChain({ chainId: coston2.id })}>Switch to Coston2</button></State></main>;
   return <main className="verify-page"><header className="verify-hero"><div><p className="eyebrow">Public proof inspector</p><h1>Verify AVERLOCK</h1><p>Inspect the public proofs and contract bindings behind a protected event.</p><div className="verify-identity"><span className="network-pill"><span/>Coston2 · 114</span><span><Icon name="wallet"/>{address ? compactAddress(address, 12, 10) : "Wallet not connected"}</span></div></div><span className="verify-hero-shield"><Icon name="shield"/></span></header>
     <form className="verify-search" onSubmit={inspect}><label htmlFor="verify-query">Rule ID, event hash, position ID, or known transaction hash</label><div><input id="verify-query" value={query} onChange={(event) => setQuery(event.target.value)} spellCheck={false}/><button className="primary-button" type="submit">Inspect public state</button></div><small>Discovery is limited to configured and receipt-backed identifiers. No wide block scan is performed.</small></form>
-    {error ? <State title="Verification stopped" body={error}/> : !data ? <State title="Reading public proofs" body="Checking Coston2 storage, exact receipts, and cryptographic bindings."/> : <VerificationContent data={data} selected={selectedNode} onSelect={setSelectedNode}/>}</main>;
+    {error ? <State title="Verification stopped" body={error}/> : loading ? <State title="Reading public proofs" body="Checking Coston2 storage, exact receipts, and cryptographic bindings."/> : data ? <VerificationContent data={data} selected={selectedNode} onSelect={setSelectedNode}/> : <State title="Verification unavailable" body="The public verification read finished without a result."/>}</main>;
 }
 
 function VerificationContent({ data, selected, onSelect }: { data: VerifyData; selected?: VerificationNode; onSelect: (node?: VerificationNode) => void }) { const d = data.detail; const fdc = publicFdcMetadata(); return <div className="verify-content">
