@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+
+# Next.js and frontend outputs
+.next/
+out/
+dist/
+build/
+coverage/
+
+# Foundry outputs and local dependencies
+cache/
+broadcast/
+lib/
+dependencies/
+
+# Local environment files
+.env
+.env.*
+!.env.example
+packages/fdc-scripts/data/*.local.json
+packages/fcc-extension/data/*.local.json
+
+# Logs and generated TypeScript state
+*.log
+*.tsbuildinfo
+
+# Local editor files
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.idea/
+
+# Operating-system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+packages/fcc-extension/.claude/
+packages/fdc-scripts/send-xrp-test.mjs
+packages/fcc-extension/proxy/patches/keystore.patch
+packages/fcc-extension/proxy/patches/keystore.patch
+packages/fcc-extension/proxy/patches/keystore.patch

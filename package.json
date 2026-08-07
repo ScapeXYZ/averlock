@@ -1,0 +1,22 @@
+{
+  "name": "averlock",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @averlock/web",
+    "build": "npm run build --workspace @averlock/web",
+    "start": "npm run start --workspace @averlock/web",
+    "lint": "npm run lint --workspace @averlock/web",
+    "typecheck": "npm run typecheck --workspace @averlock/web"
+  },
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "devDependencies": {
+    "eslint": "^9.0.0",
+    "typescript": "^6.0.0"
+  }
+}

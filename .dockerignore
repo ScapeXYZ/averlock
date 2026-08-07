@@ -1,0 +1,13 @@
+.git
+.next
+**/.next
+node_modules
+**/node_modules
+**/.env
+**/.env.*
+!**/.env.example
+**/cache
+**/broadcast
+**/out
+**/*.log
+**/*.tsbuildinfo

@@ -1,0 +1,21 @@
+{
+  "name": "@averlock/fdc-scripts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "xrpl:demo": "node src/create-xrpl-payment.mjs",
+    "xrpl:phase63": "node src/phase63-xrpl-payment.mjs",
+    "xrpl:phase63:inspect": "node src/phase63-xrpl-payment.mjs --inspect",
+    "xrpl:phase63:direct-mint": "node src/phase63-direct-mint-payment.mjs",
+    "fdc:configure-public-da": "node src/configure-public-da.mjs",
+    "fdc:phase63:prepare": "node src/prepare-phase63-fdc.mjs",
+    "fdc:phase63:retrieve": "node src/retrieve-phase63-proof.mjs"
+    ,"fdc:direct-mint:prepare": "node src/prepare-direct-mint-fdc.mjs"
+    ,"fdc:direct-mint:retrieve": "node src/retrieve-phase63-proof.mjs --direct-mint"
+    ,"fassets:direct-mint:inspect": "node src/inspect-direct-mint-execution.mjs"
+  },
+  "dependencies": {
+    "xrpl": "5.0.0"
+  }
+}
