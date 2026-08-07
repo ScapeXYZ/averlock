@@ -42,3 +42,7 @@ packages/fdc-scripts/send-xrp-test.mjs
 packages/fcc-extension/proxy/patches/keystore.patch
 packages/fcc-extension/proxy/patches/keystore.patch
 packages/fcc-extension/proxy/patches/keystore.patch
+
+# Keep web application source libraries tracked
+!apps/web/src/lib/
+!apps/web/src/lib/**
