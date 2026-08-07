@@ -26,8 +26,8 @@ RUN git clone --filter=blob:none https://github.com/flare-foundation/tee-proxy.g
     git checkout "${TEE_PROXY_REF}"
 
 WORKDIR /app/tee-proxy
-COPY proxy/patches/keystore.patch /tmp/keystore.patch
-COPY proxy/keystore/keystore.go proxy/keystore/keystore_test.go ./pkg/config/
+COPY patches/keystore.patch /tmp/keystore.patch
+COPY keystore/keystore.go keystore/keystore_test.go ./pkg/config/
 RUN patch -p1 < /tmp/keystore.patch && go mod tidy
 RUN go mod download
 RUN go test ./pkg/config
