@@ -1,0 +1,97 @@
+[indexer]
+num_parallel_req = 100 # the number of threads doing requests to the chain in parallel
+batch_size = 1000 # the number of blocks that will be pushed to a database in a batch (should be divisible by num_parallel_req)
+log_range = 10 # the size of the interval of blocks used to request logs in each request; suggested value is log_range = batch_size / num_parallel_req; note that a blockchain node might have an upper bound on this
+new_block_check_millis = 1000 # interval for checking for new blocks
+
+# standard config
+[[indexer.collect_transactions]]
+contract_address = "0x2cA6571Daa15ce734Bbd0Bf27D5C9D16787fc33f" # Submission
+func_sig = "6c532fae"
+status = true
+
+[[indexer.collect_transactions]]
+contract_address = "0x2cA6571Daa15ce734Bbd0Bf27D5C9D16787fc33f" # Submission
+func_sig = "9d00c9fd"
+status = true
+
+[[indexer.collect_transactions]]
+contract_address = "0x2cA6571Daa15ce734Bbd0Bf27D5C9D16787fc33f" # Submission
+func_sig = "57eed580"
+status = true
+
+[[indexer.collect_transactions]]
+contract_address = "0xa10B672D1c62e5457b17af63d4302add6A99d7dE" # Relay
+func_sig = "b59589d1"
+status = true
+collect_events = true
+
+[[indexer.collect_logs]]
+contract_address = "0xA90Db6D10F856799b10ef2A77EBCbF460aC71e52" # FlareSystemsManager
+topic = "undefined"
+
+[[indexer.collect_logs]]
+contract_address = "0x6a0AF07b7972177B176d3D422555cbc98DfDe914" # VoterRegistry
+topic = "undefined"
+
+[[indexer.collect_logs]]
+contract_address = "0x2580101692366e2f331e891180d9ffdF861Fce83" # Flare: Legacy VoterRegistry
+topic = "undefined"
+
+[[indexer.collect_logs]]
+contract_address = "0x31B9EC65C731c7D973a33Ef3FC83B653f540dC8D" # Songbird: Legacy VoterRegistry
+topic = "undefined"
+
+[[indexer.collect_logs]]
+contract_address = "0x7faEB56E8e98B8507db618631Be65994Ae2065Df" # FlareSystemsCalculator
+topic = "undefined"
+
+[[indexer.collect_logs]]
+contract_address = "0x67c4B11c710D35a279A41cff5eb089Fe72748CF8" # Flare: Legacy FlareSystemsCalculator
+topic = "undefined"
+
+[[indexer.collect_logs]]
+contract_address = "0x126FAeEc75601dA3354c0b5Cc0b60C85fCbC3A5e" # Songbird: Legacy FlareSystemsCalculator
+topic = "undefined"
+
+[[indexer.collect_logs]]
+contract_address = "0x93F4C0b43A221Cf0a57faa882Df5E3F6CAa5Aca8" # Coston2: Legacy FlareSystemsCalculator
+topic = "undefined"
+
+[[indexer.collect_logs]]
+contract_address = "0x3787dCBD770202F856ED9204c19d6f9022Ff3BF2" # Coston: Legacy FlareSystemsCalculator
+topic = "undefined"
+
+[[indexer.collect_logs]]
+contract_address = "0xa10B672D1c62e5457b17af63d4302add6A99d7dE" # Relay
+topic = "undefined"
+
+[[indexer.collect_logs]]
+contract_address = "0x1b7ffab226b66b5eCBdC79a42287BC09C05bCb33" # FtsoRewardOffersManager
+topic = "undefined"
+
+[[indexer.collect_logs]]
+contract_address = "0x0B162CA3acf3482d3357972e12d794434085D839" # FastUpdater
+topic = "undefined"
+
+[[indexer.collect_logs]]
+contract_address = "0xC71C1C6E6FB31eF6D948B2C074fA0d38a07D4f68" # FastUpdateIncentiveManager
+topic = "undefined"
+
+[[indexer.collect_logs]]
+contract_address = "0x48aC463d7975828989331F4De43341627b9c5f1D" # FdcHub
+topic = "undefined"
+
+[db]
+log_queries = false
+drop_table_at_start = false
+history_drop = 3628800 # 42 days
+
+[logger]
+level = "INFO"
+file = "/tmp/flare-ftso-indexer.log"
+console = true
+
+[[indexer.collect_logs]]
+contract_address = "0x1a9C4A0f9D76c0b1D91d22E24E573a9b377618aE" # FlareTeeManager
+topic = "undefined"
