@@ -41,6 +41,7 @@ WORKDIR /app
 COPY --from=builder /app/tee-proxy/main .
 RUN mkdir -p ./config
 COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
 RUN addgroup -g 1001 -S appgroup && \
     adduser -u 1001 -S appuser -G appgroup
