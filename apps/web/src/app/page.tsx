@@ -1,5 +1,5 @@
-import { Dashboard } from "@/components/dashboard/dashboard";
+import { ProtocolEntry } from "@/components/entry/protocol-entry";
 
 export default function Home() {
-  return <Dashboard />;
+  return <ProtocolEntry />;
 }
