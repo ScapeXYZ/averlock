@@ -39,7 +39,8 @@ FROM alpine:3.21
 WORKDIR /app
 
 COPY --from=builder /app/tee-proxy/main .
-COPY --from=builder /app/tee-proxy/config/config.example.toml ./config/config.toml
+RUN mkdir -p ./config
+COPY entrypoint.sh /app/entrypoint.sh
 
 RUN addgroup -g 1001 -S appgroup && \
     adduser -u 1001 -S appuser -G appgroup
@@ -51,4 +52,4 @@ USER appuser
 EXPOSE 6661
 EXPOSE 6662
 
-CMD ["./main"]
+ENTRYPOINT ["/app/entrypoint.sh"]

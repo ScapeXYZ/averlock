@@ -1,0 +1,38 @@
+#!/bin/sh
+set -eu
+
+cat > /app/config/config.toml <<CFG
+redis_port = "${REDIS_HOST}:${REDIS_PORT}"
+private_key_variable = "PROXY_PRIVATE_KEY"
+initial_signing_policy_offset = 2
+signing_policy_fetch_interval = "20s"
+
+chain_id = 114
+
+[db]
+host = "${DB_HOST}"
+port = ${DB_PORT}
+database = "${DB_DATABASE}"
+username = "${DB_USERNAME}"
+password = "${DB_PASSWORD}"
+log_queries = false
+
+[addresses]
+flare_systems_manager = "0xA90Db6D10F856799b10ef2A77EBCbF460aC71e52"
+relay = "0xa10B672D1c62e5457b17af63d4302add6A99d7dE"
+voter_registry = "0x6a0AF07b7972177B176d3D422555cbc98DfDe914"
+
+[ports]
+internal = "6663"
+external = "6664"
+
+[info_timing]
+cycle_internal = "10s"
+cycle_queue_response_wait = "2s"
+
+[voting]
+proposal_expiration = "12s"
+max_pending_request = 10000
+CFG
+
+exec ./main
