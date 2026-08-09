@@ -85,7 +85,7 @@ topic = "undefined"
 [db]
 log_queries = false
 drop_table_at_start = false
-history_drop = 86400 # 1 day
+history_drop = 172800 # 2 days
 
 [logger]
 level = "INFO"
