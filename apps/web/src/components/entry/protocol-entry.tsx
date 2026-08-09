@@ -34,7 +34,7 @@ export function ProtocolEntry() {
   return <main className="protocol-entry">
     <nav className="protocol-entry-nav" aria-label="AVERLOCK entry">
       <div className="wordmark"><span className="logo-mark"><Icon name="shield" /></span><span>AVERLOCK</span></div>
-      <span className="entry-network"><i />Coston2 · Flare</span>
+      <span className="entry-network"><i />Built on Flare</span>
     </nav>
     <section className="protocol-entry-hero">
       <div className="entry-copy">
