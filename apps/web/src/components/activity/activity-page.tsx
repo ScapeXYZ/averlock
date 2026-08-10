@@ -7,7 +7,7 @@ import { activityAnchors, readWalletActivity, type ActivityCategory, type Activi
 import { loadClaimReceipts } from "@/lib/averlock/activity-index";
 import { contracts, coston2 } from "@/lib/averlock/config";
 import { compactAddress, formatDate, formatToken } from "@/lib/averlock/format";
-import { loadGuardIndex } from "@/lib/averlock/guard-index";
+import { fetchGuardIndex } from "@/lib/averlock/guard-index";
 import { devError, userFacingError } from "@/lib/averlock/errors";
 
 const explorer = coston2.blockExplorers.default.url;
@@ -20,7 +20,7 @@ export function ActivityPage() {
   const refresh = useCallback(async () => {
     if (!address || chainId !== coston2.id) return;
     setError(""); setData(undefined);
-    try { setData(await readWalletActivity(address, activityAnchors(loadGuardIndex(address)), loadClaimReceipts(address))); }
+    try { setData(await readWalletActivity(address, activityAnchors(await fetchGuardIndex(address)), loadClaimReceipts(address))); }
     catch (cause) { devError("activity read", cause); setError(userFacingError(cause, "Verified activity could not be loaded safely.")); }
   }, [address, chainId]);
   useEffect(() => { void Promise.resolve().then(refresh); }, [refresh]);

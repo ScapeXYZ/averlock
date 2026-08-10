@@ -16,6 +16,29 @@ export type GuardIndexEntry = {
 };
 const key = (owner: Address) => `averlock:guards:${owner.toLowerCase()}`;
 
+type IndexerEvent = { transaction_hash: Hex; block_number: string; payload: { ruleId: Hex } };
+
+/**
+ * Product history comes from the small AVERLOCK-only indexer when configured. The
+ * browser cache is retained solely as a receipt hand-off while that service catches
+ * up; it is never treated as contract state or as a fabricated history source.
+ */
+export async function fetchGuardIndex(owner: Address): Promise<GuardIndexEntry[]> {
+  const base = process.env.NEXT_PUBLIC_AVERLOCK_INDEXER_URL;
+  if (!base) return loadGuardIndex(owner);
+  const response = await fetch(`${base.replace(/\/$/, "")}/guards?owner=${owner}`, { cache: "no-store" });
+  if (!response.ok) throw new Error("AVERLOCK activity indexer is unavailable.");
+  const body = await response.json() as { items?: IndexerEvent[] };
+  const remote = (body.items || []).map((event) => ({
+    ruleId: event.payload.ruleId, registrationBlock: event.block_number,
+    transactionHash: event.transaction_hash, owner,
+  } satisfies GuardIndexEntry));
+  // A just-confirmed guard can be used immediately even if the optional history
+  // indexer is behind. Contract reads remain authoritative in either case.
+  const cached = loadGuardIndex(owner);
+  return [...new Map([...cached, ...remote].map((entry) => [entry.ruleId.toLowerCase(), entry])).values()];
+}
+
 export function loadGuardIndex(owner: Address): GuardIndexEntry[] {
   if (typeof window === "undefined") return [];
   try {

@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { getAddress, type Hex } from "viem";
 import { useAccount } from "wagmi";
 import { compactAddress } from "@/lib/averlock/format";
-import { loadGuardIndex } from "@/lib/averlock/guard-index";
+import { fetchGuardIndex } from "@/lib/averlock/guard-index";
 import { readGuard } from "@/lib/averlock/reads";
 import type { GuardRecord } from "@/lib/averlock/types";
 import { Icon } from "@/components/dashboard/icons";
@@ -22,7 +22,7 @@ export function GuardsList() {
     let cancelled = false;
     if (!address) return;
     Promise.resolve().then(() => { if (!cancelled) { setLoading(true); setError(""); } });
-    Promise.all(loadGuardIndex(address).map(async (entry) => ({ ...entry, guard: await readGuard(entry.ruleId) })))
+    fetchGuardIndex(address).then((index) => Promise.all(index.map(async (entry) => ({ ...entry, guard: await readGuard(entry.ruleId) }))))
       .then((items) => { if (!cancelled) setGuards(items.filter((item) => getAddress(item.guard.owner) === getAddress(address))); })
       .catch((cause) => { devError("guard list", cause); if (!cancelled) setError(userFacingError(cause, "Registered guards could not be loaded safely.")); })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -32,7 +32,7 @@ export function GuardsList() {
   if (!isConnected) return <Empty title="Connect your Coston2 wallet" body="AVERLOCK reads guards owned by the connected wallet. No private policy values are requested."/>;
   if (loading) return <Empty title="Reading registered guards" body="Checking receipt-backed guard IDs against the live Coston2 GuardManager."/>;
   if (error) return <Empty title="Guard reads unavailable" body={error}/>;
-  if (!guards.length) return <Empty title="No guards registered from this browser" body="Guard discovery uses locally recorded public registration receipts, avoiding unsafe wide Coston2 log scans."/>;
+  if (!guards.length) return <Empty title="No guards registered" body="The AVERLOCK event indexer has no confirmed guard history for this wallet yet. It may be safely catching up; contract reads do not depend on it."/>;
   return <div className="guard-list">{guards.map(({ guard, ruleId, transactionHash }) => <Link href={`/guards/${ruleId}`} className="guard-list-card" key={ruleId}><span className="guard-card-icon"><Icon name="shield"/></span><div><p>Private payment guard</p><h2>{compactAddress(ruleId, 12, 10)}</h2><small>Commitment {compactAddress(guard.policyCommitment, 10, 8)}</small></div><div className="guard-list-meta"><strong>{guard.active ? "Active" : "Inactive"}</strong><span>Schedule {guard.scheduleId}</span><span>Tx {compactAddress(transactionHash, 8, 6)}</span></div></Link>)}</div>;
 }
 

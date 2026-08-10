@@ -7,7 +7,7 @@ import { Icon } from "@/components/dashboard/icons";
 import { contracts, coston2, fccConfig } from "@/lib/averlock/config";
 import { compactAddress, formatDate, formatToken, formatUsd18, formatXrpFromSnapshot, relativeUnlock } from "@/lib/averlock/format";
 import { configuredDetailAnchor, isValidGuardRuleId, readGuardDetail } from "@/lib/averlock/guard-detail";
-import { loadGuardIndex } from "@/lib/averlock/guard-index";
+import { fetchGuardIndex, type GuardIndexEntry } from "@/lib/averlock/guard-index";
 import type { GuardDetailAnchor, GuardDetailData, GuardLifecycleStage } from "@/lib/averlock/types";
 import { devError, userFacingError } from "@/lib/averlock/errors";
 import { ProcessPaymentFlow } from "./process-payment-flow";
@@ -21,15 +21,21 @@ export function GuardDetail({ ruleId }: { ruleId: string }) {
   const [data, setData] = useState<GuardDetailData>();
   const [error, setError] = useState("");
   const [indexRevision, setIndexRevision] = useState(0);
+  const [indexed, setIndexed] = useState<GuardIndexEntry>();
   const validRuleId = isValidGuardRuleId(ruleId);
+  useEffect(() => {
+    if (!address || !validRuleId) { setIndexed(undefined); return; }
+    let cancelled = false;
+    fetchGuardIndex(address).then((entries) => { if (!cancelled) setIndexed(entries.find((entry) => entry.ruleId.toLowerCase() === ruleId.toLowerCase())); }).catch(() => { if (!cancelled) setIndexed(undefined); });
+    return () => { cancelled = true; };
+  }, [address, indexRevision, ruleId, validRuleId]);
   const anchor = useMemo<GuardDetailAnchor>(() => {
-    // Receipt persistence increments this revision so localStorage is reconstructed immediately.
+    // The optional indexer supplies receipt anchors; direct contract reads below remain authoritative.
     void indexRevision;
     if (!validRuleId) return {};
     const configured = configuredDetailAnchor(ruleId as Hex) || {};
-    const indexed = address ? loadGuardIndex(address).find((entry) => entry.ruleId.toLowerCase() === ruleId.toLowerCase()) : undefined;
     return { ...configured, owner: address, registrationBlock: indexed ? BigInt(indexed.registrationBlock) : configured.registrationBlock, registrationTransaction: indexed?.transactionHash || configured.registrationTransaction, eventHash: indexed?.eventHash || configured.eventHash, actionId: indexed?.actionId || configured.actionId, executionBlock: indexed?.executionBlock ? BigInt(indexed.executionBlock) : configured.executionBlock, executionTransaction: indexed?.executionTransaction || configured.executionTransaction };
-  }, [address, indexRevision, ruleId, validRuleId]);
+  }, [address, indexRevision, indexed, ruleId, validRuleId]);
 
   useEffect(() => {
     if (!validRuleId || (isConnected && chainId !== coston2.id)) return;

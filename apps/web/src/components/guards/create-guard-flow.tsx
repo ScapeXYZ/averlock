@@ -7,7 +7,7 @@ import { useAccount, usePublicClient, useSwitchChain, useWriteContract } from "w
 import { contracts, coston2, fccConfig } from "@/lib/averlock/config";
 import { guardManagerAbi, instructionSenderAbi } from "@/lib/averlock/contracts";
 import { compactAddress } from "@/lib/averlock/format";
-import { preparePrivatePolicy, waitForPolicyResult } from "@/lib/averlock/fcc-client";
+import { getConfidentialVerificationResult, requestConfidentialVerification } from "@/lib/averlock/fcc-client";
 import { saveGuardIndex } from "@/lib/averlock/guard-index";
 import { buildPolicy, receiverHash, validateGuardForm, type GuardForm, type ValidationErrors } from "@/lib/averlock/validation";
 import { instructionIdFromReceipt, verifyRegisteredGuard, type CreationStage } from "@/lib/averlock/writes";
@@ -51,7 +51,9 @@ export function CreateGuardFlow() {
     const monitoredReceiverHash = receiverHash(form.xrplDestination);
     try {
       setFailure(""); setStage("preparing");
-      const prepared = await preparePrivatePolicy(policy);
+      const policyRequest = await requestConfidentialVerification(policy);
+      if (!policyRequest.result) throw new Error(policyRequest.status === "FCC_UNAVAILABLE" ? "FCC is unavailable. Your guard was not created and no verification was fabricated." : policyRequest.error || "Private policy preparation failed.");
+      const prepared = policyRequest.result;
       if (prepared.ruleId !== ruleId || prepared.extensionId !== "65927") throw new Error("FCC preparation returned an unexpected rule or extension binding.");
       setStage("policy-signature");
       const policyTx = await writeContractAsync({ chainId: coston2.id, address: contracts.instructionSender, abi: instructionSenderAbi, functionName: "createPolicy", args: [prepared.encryptedEnvelope], value: fccConfig.instructionFee });
@@ -60,7 +62,9 @@ export function CreateGuardFlow() {
       if (policyReceipt.status !== "success") throw new Error("The private-policy instruction transaction reverted.");
       const actionId = instructionIdFromReceipt(policyReceipt);
       setStage("policy-processing");
-      const policyResult = await waitForPolicyResult(actionId, ruleId, prepared.policyCommitment);
+      const policyVerification = await getConfidentialVerificationResult(actionId, ruleId, prepared.policyCommitment);
+      if (!policyVerification.result) throw new Error(policyVerification.status === "FCC_UNAVAILABLE" ? "FCC is unavailable; the guard registration was not sent." : policyVerification.error || "FCC policy verification failed closed.");
+      const policyResult = policyVerification.result;
       if (!policyResult.signatureValid || policyResult.policyCommitment !== prepared.policyCommitment) throw new Error("FCC policy verification failed closed.");
       setStage("guard-signature");
       const registerTx = await writeContractAsync({ chainId: coston2.id, address: contracts.guardManager, abi: guardManagerAbi, functionName: "registerGuard", args: [ruleId, prepared.policyCommitment, monitoredReceiverHash, 1] });
