@@ -3,8 +3,8 @@ timeout_millis = 30000
 backoff_max_elapsed_time_seconds = 900
 
 [indexer]
-num_parallel_req = 10 # the number of threads doing requests to the chain in parallel
-batch_size = 1000 # the number of blocks that will be pushed to a database in a batch (should be divisible by num_parallel_req)
+num_parallel_req = 2 # the number of threads doing requests to the chain in parallel
+batch_size = 200 # the number of blocks that will be pushed to a database in a batch (should be divisible by num_parallel_req)
 log_range = 1000 # the size of the interval of blocks used to request logs in each request; suggested value is log_range = batch_size / num_parallel_req; note that a blockchain node might have an upper bound on this
 new_block_check_millis = 1000 # interval for checking for new blocks
 
