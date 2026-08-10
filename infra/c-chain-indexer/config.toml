@@ -1,3 +1,7 @@
+[timeout]
+timeout_millis = 30000
+backoff_max_elapsed_time_seconds = 900
+
 [indexer]
 num_parallel_req = 100 # the number of threads doing requests to the chain in parallel
 batch_size = 1000 # the number of blocks that will be pushed to a database in a batch (should be divisible by num_parallel_req)
@@ -88,7 +92,7 @@ drop_table_at_start = false
 history_drop = 172800 # 2 days
 
 [logger]
-level = "INFO"
+level = "DEBUG"
 file = "/tmp/flare-ftso-indexer.log"
 console = true
 
