@@ -6,16 +6,16 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"os/signal"
 	"strconv"
 	"syscall"
 	"time"
 
-	"github.com/flare-foundation/go-flare-common/pkg/logger"
-	teeServer "github.com/flare-foundation/tee-node/pkg/server"
-
 	"extension-scaffold/internal/config"
+	"extension-scaffold/internal/teenode"
 	extserver "extension-scaffold/pkg/server"
+	"github.com/flare-foundation/go-flare-common/pkg/logger"
 )
 
 func main() {
@@ -26,11 +26,21 @@ func main() {
 	signPort := config.SignPort
 	extensionPort := config.ExtensionPort
 
-	// Start tee-node in extension mode.
-	go teeServer.StartServerExtension(configPort, signPort, extensionPort)
-
-	// Start extension server — fail fast if port binding fails.
+	// Initialize the extension first: its Redis state store reads the Railway
+	// decimal EXTENSION_ID. tee-node is then started as a child with a scoped
+	// bytes32 EXTENSION_ID; this parent process is never mutated.
 	extErrCh := extserver.StartExtension(extensionPort, signPort)
+	teeEnv, err := teenode.EnvForCurrentProcess()
+	if err != nil {
+		logger.Fatalf("invalid Railway EXTENSION_ID: %v", err)
+	}
+	teeCmd := exec.Command("/app/tee-node")
+	teeCmd.Env = teeEnv
+	if err := teeCmd.Start(); err != nil {
+		logger.Fatalf("start tee-node: %v", err)
+	}
+	teeErrCh := make(chan error, 1)
+	go func() { teeErrCh <- teeCmd.Wait() }()
 
 	// Give server a moment to bind, then check for early failures.
 	time.Sleep(100 * time.Millisecond)
@@ -50,7 +60,10 @@ func main() {
 		logger.Info("shutting down")
 	case err := <-extErrCh:
 		logger.Fatalf("extension server error: %v", err)
+	case err := <-teeErrCh:
+		logger.Fatalf("tee-node exited: %v", err)
 	}
+	_ = teeCmd.Process.Signal(syscall.SIGTERM)
 }
 
 func intEnv(key string, fallback int) int {

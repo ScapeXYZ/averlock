@@ -80,6 +80,18 @@ func TestRedisStateStartupRequiresValidChainAndExtensionID(t *testing.T) {
 	}
 }
 
+func TestRedisStateStoreUsesRailwayDecimalExtensionID(t *testing.T) {
+	t.Setenv("FCC_STATE_STORE", "redis")
+	t.Setenv("FCC_STATE_SEAL_KEY", strings.Repeat("11", 32))
+	t.Setenv("REDIS_URL", "redis://default:password@127.0.0.1:6379/0")
+	t.Setenv("CHAIN_ID", "114")
+	t.Setenv("EXTENSION_ID", "65927")
+	store, ok := stateStoreFromEnv().(*redisStore)
+	if !ok || store.extensionID != "65927" || store.prefix != "averlock:114:65927" {
+		t.Fatalf("state store did not retain decimal EXTENSION_ID: %#v", store)
+	}
+}
+
 func TestRedisNamespaceAndAAD(t *testing.T) {
 	b, _ := aes.NewCipher(make([]byte, 32))
 	a, _ := cipher.NewGCM(b)

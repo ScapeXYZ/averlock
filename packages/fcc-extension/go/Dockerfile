@@ -59,6 +59,8 @@ COPY --chmod=644 --chown=0:0 go/pkg/ ./pkg/
 # CGO_ENABLED=0 produces a static binary, avoiding link-time libc variance
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOFLAGS="-buildvcs=false" \
     go build -trimpath -ldflags="-buildid= -s -w" -o /app/extension-tee ./cmd/docker
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOFLAGS="-buildvcs=false" \
+    go build -trimpath -ldflags="-buildid= -s -w" -o /app/tee-node ./cmd/tee-node
 
 # NOTE: buildkit's rewrite-timestamp only clamps mtimes down to SOURCE_DATE_EPOCH (moby/buildkit#3180)
 # files older than SOURCE_DATE_EPOCH are left at their original non-deterministic mtime
@@ -74,6 +76,7 @@ WORKDIR /app
 # re-apply chmod/chown on each COPY so metadata is pinned here and does not depend on whatever the builder stage left behind
 COPY --chmod=644 --chown=65532:65532 --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --chmod=755 --chown=65532:65532 --from=builder /app/extension-tee /app/extension-tee
+COPY --chmod=755 --chown=65532:65532 --from=builder /app/tee-node /app/tee-node
 
 # MODE=1 is SIMULATED attestation (local dev). MODE=0 is production attestation.
 # Set to 1 here so a bare `docker run` works against the local devnet; compose
