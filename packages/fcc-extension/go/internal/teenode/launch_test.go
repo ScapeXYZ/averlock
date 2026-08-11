@@ -16,7 +16,7 @@ func TestExtensionIDBytes32Deterministic(t *testing.T) {
 }
 
 func TestChildEnvScopesExtensionIDToTeeNode(t *testing.T) {
-	env, err := ChildEnv([]string{"EXTENSION_ID=65927", "FCC_STATE_STORE=redis", "OTHER=value"}, "65927")
+	env, err := ChildEnv([]string{"EXTENSION_ID=65927", "FCC_STATE_STORE=redis", "PROXY_URL=http://chic-essence.railway.internal:6663", "OTHER=value"}, "65927")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,6 +29,9 @@ func TestChildEnvScopesExtensionIDToTeeNode(t *testing.T) {
 	}
 	if !strings.Contains(got, "FCC_STATE_STORE=redis") {
 		t.Fatal("child environment unexpectedly changed state-store configuration")
+	}
+	if !strings.Contains(got, "PROXY_URL=http://chic-essence.railway.internal:6663") {
+		t.Fatal("child environment unexpectedly changed PROXY_URL")
 	}
 }
 

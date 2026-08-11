@@ -5,10 +5,12 @@
 package main
 
 import (
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -36,6 +38,12 @@ func main() {
 	}
 	teeCmd := exec.Command("/app/tee-node")
 	teeCmd.Env = teeEnv
+	// The tee-node owns the queue workers. Keep its structured logs in the
+	// container log stream so startup and proxy-connectivity failures are
+	// observable in Railway.
+	teeCmd.Stdout = os.Stdout
+	teeCmd.Stderr = os.Stderr
+	logger.Infof("starting tee-node with PROXY_URL=%s", safeProxyURL(envValue(teeEnv, "PROXY_URL")))
 	if err := teeCmd.Start(); err != nil {
 		logger.Fatalf("start tee-node: %v", err)
 	}
@@ -64,6 +72,33 @@ func main() {
 		logger.Fatalf("tee-node exited: %v", err)
 	}
 	_ = teeCmd.Process.Signal(syscall.SIGTERM)
+}
+
+// safeProxyURL returns the effective proxy address without logging URL
+// credentials or query/fragment values, which can contain secrets.
+func safeProxyURL(raw string) string {
+	if raw == "" {
+		return "<empty>"
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return "<invalid>"
+	}
+	u.User = nil
+	u.RawQuery = ""
+	u.Fragment = ""
+	return u.String()
+}
+
+// envValue obtains a value from the exact environment passed to exec.Cmd.
+func envValue(env []string, key string) string {
+	prefix := key + "="
+	for _, entry := range env {
+		if strings.HasPrefix(entry, prefix) {
+			return strings.TrimPrefix(entry, prefix)
+		}
+	}
+	return ""
 }
 
 func intEnv(key string, fallback int) int {
