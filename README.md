@@ -73,7 +73,8 @@ volume mounted at `/data`; do **not** point it at, reset, or reuse the FCC MySQL
 
 Set `AVERLOCK_RPC_URL`, `AVERLOCK_CONTRACT_ADDRESSES`, `AVERLOCK_START_BLOCK`,
 `AVERLOCK_INDEXER_DB_PATH=/data/averlock-events.sqlite`, `AVERLOCK_CONFIRMATIONS=12`,
-`AVERLOCK_REORG_OVERLAP=24`, `AVERLOCK_LOG_BLOCK_RANGE=250`, and `PORT=8080`. Set the resulting
+`AVERLOCK_REORG_OVERLAP=24`, `AVERLOCK_LOG_BLOCK_RANGE=30`, `AVERLOCK_RPC_REQUESTS_PER_SECOND=2`,
+and `PORT=8080`. Set the resulting
 public URL as `NEXT_PUBLIC_AVERLOCK_INDEXER_URL` on the web service, then redeploy the web app.
 
 Service classification: web + Coston2 RPC are **required for the demo**; the AVERLOCK event

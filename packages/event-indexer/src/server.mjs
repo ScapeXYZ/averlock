@@ -3,6 +3,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { createPublicClient, decodeEventLog, http as viemHttp, parseAbiItem } from "viem";
+import { createRateLimitedFetch, requestsPerSecond } from "./rpc-pacer.mjs";
 
 const required = (name) => {
   const value = process.env[name];
@@ -14,18 +15,29 @@ const number = (name, fallback) => {
   if (!Number.isSafeInteger(value) || value < 0) throw new Error(`${name} must be a non-negative integer`);
   return value;
 };
-const addresses = required("AVERLOCK_CONTRACT_ADDRESSES").split(",").map((value) => value.trim().toLowerCase());
-if (addresses.length < 2) throw new Error("AVERLOCK_CONTRACT_ADDRESSES must contain GuardManager then ProtectionVault");
 // Coston2 rejects eth_getLogs ranges greater than 30 blocks with JSON-RPC -32000.
 // Keep the environment setting as a throughput preference, but never emit an
 // incompatible request to this configured Coston2 RPC.
 const coston2MaxLogBlockRange = 30;
-const config = {
-  startBlock: BigInt(required("AVERLOCK_START_BLOCK")), confirmations: number("AVERLOCK_CONFIRMATIONS", 12),
-  overlap: number("AVERLOCK_REORG_OVERLAP", 24),
-  range: Math.min(Math.max(number("AVERLOCK_LOG_BLOCK_RANGE", coston2MaxLogBlockRange), 1), coston2MaxLogBlockRange),
-  rpcUrl: required("AVERLOCK_RPC_URL"), dbPath: process.env.AVERLOCK_INDEXER_DB_PATH || "./data/averlock-events.sqlite",
-};
+let addresses;
+let config;
+let configurationError;
+try {
+  addresses = required("AVERLOCK_CONTRACT_ADDRESSES").split(",").map((value) => value.trim().toLowerCase());
+  if (addresses.length < 2) throw new Error("AVERLOCK_CONTRACT_ADDRESSES must contain GuardManager then ProtectionVault");
+  config = {
+    startBlock: BigInt(required("AVERLOCK_START_BLOCK")), confirmations: number("AVERLOCK_CONFIRMATIONS", 12),
+    overlap: number("AVERLOCK_REORG_OVERLAP", 24),
+    range: Math.min(Math.max(number("AVERLOCK_LOG_BLOCK_RANGE", coston2MaxLogBlockRange), 1), coston2MaxLogBlockRange),
+    requestsPerSecond: requestsPerSecond(process.env.AVERLOCK_RPC_REQUESTS_PER_SECOND ?? "2"),
+    rpcUrl: required("AVERLOCK_RPC_URL"), dbPath: process.env.AVERLOCK_INDEXER_DB_PATH || "./data/averlock-events.sqlite",
+  };
+} catch (error) {
+  configurationError = error instanceof Error ? error.message : String(error);
+  // Keep health reporting available for an operator to see the fatal error.
+  addresses = ["0x0000000000000000000000000000000000000000", "0x0000000000000000000000000000000000000000"];
+  config = { startBlock: 0n, confirmations: 12, overlap: 24, range: 30, requestsPerSecond: 2, rpcUrl: "http://127.0.0.1:0", dbPath: process.env.AVERLOCK_INDEXER_DB_PATH || "./data/averlock-events.sqlite" };
+}
 mkdirSync(dirname(config.dbPath), { recursive: true });
 const db = new DatabaseSync(config.dbPath);
 db.exec(`PRAGMA journal_mode = WAL;
@@ -42,7 +54,13 @@ const setCursor = db.prepare("INSERT INTO cursor (id,last_processed_block) VALUE
 const deleteFrom = db.prepare("DELETE FROM events WHERE CAST(block_number AS INTEGER) >= CAST(? AS INTEGER)");
 const insert = db.prepare(`INSERT INTO events (transaction_hash,log_index,block_number,block_hash,contract_address,event_name,owner,rule_id,event_hash,action_id,position_id,payload)
 VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(transaction_hash,log_index) DO UPDATE SET block_hash=excluded.block_hash, payload=excluded.payload`);
-const client = createPublicClient({ transport: viemHttp(config.rpcUrl, { timeout: 20_000, retryCount: 0 }) });
+// This fetch sits below viem, so every JSON-RPC method shares one process-wide pace.
+// In particular, the concurrent event filters cannot create an HTTP burst.
+const rpcFetch = createRateLimitedFetch({
+  requestsPerSecond: config.requestsPerSecond,
+  onRetry: ({ attempt, delay, retryAfter }) => console.warn(`Coston2 RPC 429; retry ${attempt} in ${delay}ms${retryAfter ? " (Retry-After)" : ""}`),
+});
+const client = createPublicClient({ transport: viemHttp(config.rpcUrl, { fetchFn: rpcFetch, timeout: 0, retryCount: 0 }) });
 
 const events = [
   [addresses[0], parseAbiItem("event GuardRegistered(address indexed owner, bytes32 indexed ruleId, bytes32 indexed policyCommitment, bytes32 monitoredReceiverHash, uint32 scheduleId, uint64 createdAt)")],
@@ -103,14 +121,16 @@ function json(response, status, body) { response.writeHead(status, { "content-ty
 function syncStatus() {
   const saved = cursor.get(); const indexed = saved ? BigInt(saved.last_processed_block) : config.startBlock - 1n;
   const lagBlocks = lastSafeHead === undefined ? undefined : lastSafeHead > indexed ? lastSafeHead - indexed : 0n;
-  return { status: lastError ? "degraded" : "ok", syncing, startBlock: config.startBlock.toString(), lastProcessedBlock: indexed.toString(), chainHead: lastChainHead?.toString(), safeHead: lastSafeHead?.toString(), lagBlocks: lagBlocks?.toString(), confirmations: config.confirmations, reorgOverlap: config.overlap, lastError };
+  const rpc = rpcFetch.status();
+  const status = configurationError ? "fatal_configuration_error" : rpc.retrying ? "rate_limited" : syncing ? "syncing" : lastError ? "retrying" : "healthy";
+  return { status, syncing, retrying: rpc.retrying || Boolean(lastError), rpcRequestsPerSecond: config.requestsPerSecond, retryAfter: rpc.blockedUntil ? new Date(rpc.blockedUntil).toISOString() : undefined, startBlock: config.startBlock.toString(), lastProcessedBlock: indexed.toString(), chainHead: lastChainHead?.toString(), safeHead: lastSafeHead?.toString(), lagBlocks: lagBlocks?.toString(), confirmations: config.confirmations, reorgOverlap: config.overlap, lastError, configurationError };
 }
 const rowsForOwner = db.prepare("SELECT * FROM events WHERE owner = ? ORDER BY CAST(block_number AS INTEGER) DESC, log_index DESC LIMIT 500");
 const guardsForOwner = db.prepare("SELECT * FROM events WHERE owner = ? AND event_name = 'GuardRegistered' ORDER BY CAST(block_number AS INTEGER) DESC LIMIT 100");
 const server = http.createServer((request, response) => {
   const url = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
   if (request.method !== "GET") return json(response, 405, { error: "Method not allowed" });
-  if (url.pathname === "/health") return json(response, lastError ? 503 : 200, { ...syncStatus(), service: "averlock-event-indexer" });
+  if (url.pathname === "/health") return json(response, lastError || configurationError ? 503 : 200, { ...syncStatus(), service: "averlock-event-indexer" });
   if (url.pathname === "/sync") return json(response, 200, syncStatus());
   const owner = url.searchParams.get("owner")?.toLowerCase();
   if ((url.pathname === "/activity" || url.pathname === "/guards") && !/^0x[0-9a-f]{40}$/.test(owner || "")) return json(response, 400, { error: "A valid owner address is required" });
@@ -118,4 +138,8 @@ const server = http.createServer((request, response) => {
   if (url.pathname === "/guards") return json(response, 200, { items: guardsForOwner.all(owner).map((row) => ({ ...row, payload: JSON.parse(row.payload) })), sync: syncStatus() });
   return json(response, 404, { error: "Not found" });
 });
-server.listen(Number(process.env.PORT || 8080), "0.0.0.0", () => { console.log("AVERLOCK event indexer listening"); sync(); setInterval(sync, 15_000).unref(); });
+server.listen(Number(process.env.PORT || 8080), "0.0.0.0", () => {
+  console.log("AVERLOCK event indexer listening");
+  if (configurationError) console.error(`Fatal AVERLOCK event-indexer configuration error: ${configurationError}`);
+  else { sync(); setInterval(sync, 15_000).unref(); }
+});

@@ -13,6 +13,11 @@ Coston2 limits filtered `eth_getLogs` requests to 30 blocks. The indexer clamps
 `AVERLOCK_LOG_BLOCK_RANGE` to 30, so the service remains compatible even if an older Railway
 variable is still set to `250`.
 
+All JSON-RPC calls share a global `AVERLOCK_RPC_REQUESTS_PER_SECOND` limiter (default `2`). A
+429 honors `Retry-After` when supplied, otherwise retries with exponential backoff and jitter;
+`/health` and `/sync` report `fatal_configuration_error`, `rate_limited`, `retrying`, `syncing`,
+or `healthy` explicitly.
+
 `AVERLOCK_CONFIRMATIONS` defaults to 12. Every run rewinds the persisted cursor by
 `AVERLOCK_REORG_OVERLAP` (default 24) before resuming, deletes only that overlap's derived
 events, and replays it. This makes short Coston2 reorgs safe without claiming the service is
