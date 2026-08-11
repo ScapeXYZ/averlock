@@ -27,8 +27,11 @@ RUN git clone --filter=blob:none https://github.com/flare-foundation/tee-proxy.g
 
 WORKDIR /app/tee-proxy
 COPY patches/keystore.patch /tmp/keystore.patch
+COPY patches/startup-cchain-sync-tolerance.patch /tmp/startup-cchain-sync-tolerance.patch
 COPY keystore/keystore.go keystore/keystore_test.go ./pkg/config/
-RUN patch -p1 < /tmp/keystore.patch && go mod tidy
+RUN patch -p1 < /tmp/keystore.patch && \
+    patch -p1 < /tmp/startup-cchain-sync-tolerance.patch && \
+    go mod tidy
 RUN go mod download
 RUN go test ./pkg/config
 RUN CGO_ENABLED=0 GOOS=linux go build -a -o main ./cmd/proxy
