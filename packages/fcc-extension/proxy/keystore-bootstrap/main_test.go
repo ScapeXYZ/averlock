@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/crypto"
@@ -38,6 +39,32 @@ func TestExistingKeystoreIsNotRecreated(t *testing.T) {
 	}
 	if !bytes.Equal(original, after) {
 		t.Fatal("existing keystore changed")
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0600 {
+		t.Fatalf("keystore mode = %o, want 0600", info.Mode().Perm())
+	}
+}
+
+func TestCreateKeystoreFilesystemErrorIncludesSafePathAndOSCause(t *testing.T) {
+	key, err := crypto.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	blocker := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(blocker, []byte("x"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(blocker, "proxy-keystore.json")
+	_, err = createKeystore(path, key, "password")
+	if err == nil {
+		t.Fatal("expected filesystem error")
+	}
+	if !strings.Contains(err.Error(), blocker) || !strings.Contains(err.Error(), "not a directory") {
+		t.Fatalf("filesystem error should contain safe path and OS cause, got %v", err)
 	}
 }
 

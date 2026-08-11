@@ -47,6 +47,10 @@ FROM alpine:3.21
 
 WORKDIR /app
 
+# su-exec performs a one-way, exec-based privilege drop after the entrypoint
+# has prepared the Railway-mounted data directory.
+RUN apk add --no-cache su-exec
+
 COPY --from=builder /app/tee-proxy/main .
 COPY --from=builder /app/proxy-keystore ./proxy-keystore
 RUN mkdir -p ./config
@@ -57,8 +61,6 @@ RUN addgroup -g 1001 -S appgroup && \
     adduser -u 1001 -S appuser -G appgroup
 
 RUN chown -R appuser:appgroup /app
-
-USER appuser
 
 EXPOSE 6661
 EXPOSE 6662

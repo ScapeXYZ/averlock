@@ -94,31 +94,31 @@ func createKeystore(path string, key *ecdsa.PrivateKey, password string) (common
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, ".proxy-keystore-*")
 	if err != nil {
-		return common.Address{}, errors.New("creating temporary keystore failed")
+		return common.Address{}, fmt.Errorf("creating temporary keystore in %q: %w", dir, err)
 	}
 	tmpPath := tmp.Name()
 	defer os.Remove(tmpPath)
 	if err := tmp.Chmod(0600); err != nil {
 		tmp.Close()
-		return common.Address{}, errors.New("securing temporary keystore failed")
+		return common.Address{}, fmt.Errorf("securing temporary keystore %q: %w", tmpPath, err)
 	}
 	if _, err := tmp.Write(json); err != nil {
 		tmp.Close()
-		return common.Address{}, errors.New("writing encrypted proxy keystore failed")
+		return common.Address{}, fmt.Errorf("writing encrypted proxy keystore %q: %w", tmpPath, err)
 	}
 	if err := tmp.Sync(); err != nil {
 		tmp.Close()
-		return common.Address{}, errors.New("syncing encrypted proxy keystore failed")
+		return common.Address{}, fmt.Errorf("syncing encrypted proxy keystore %q: %w", tmpPath, err)
 	}
 	if err := tmp.Close(); err != nil {
-		return common.Address{}, errors.New("closing encrypted proxy keystore failed")
+		return common.Address{}, fmt.Errorf("closing encrypted proxy keystore %q: %w", tmpPath, err)
 	}
 	// link is atomic and fails if another process created the target first.
 	if err := os.Link(tmpPath, path); err != nil {
-		return common.Address{}, errors.New("encrypted proxy keystore already exists or could not be installed")
+		return common.Address{}, fmt.Errorf("installing encrypted proxy keystore at %q: %w", path, err)
 	}
 	if err := os.Chmod(path, 0600); err != nil {
-		return common.Address{}, errors.New("securing encrypted proxy keystore failed")
+		return common.Address{}, fmt.Errorf("securing encrypted proxy keystore %q: %w", path, err)
 	}
 	return address, nil
 }
@@ -132,7 +132,7 @@ func verifyKeystore(path, expected, password string) (common.Address, error) {
 	}
 	json, err := os.ReadFile(path)
 	if err != nil {
-		return common.Address{}, errors.New("reading encrypted proxy keystore failed")
+		return common.Address{}, fmt.Errorf("reading encrypted proxy keystore %q: %w", path, err)
 	}
 	key, err := keystore.DecryptKey(json, password)
 	if err != nil {

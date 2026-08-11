@@ -6,6 +6,33 @@ fail() {
   exit 1
 }
 
+keystore_path=/data/proxy-keystore.json
+
+# Railway mounts volumes after the image filesystem is assembled and they can
+# therefore arrive owned by root.  This is the only root-only phase.  It never
+# creates, replaces, or reads keystore contents; it makes the mounted
+# directory and a pre-existing keystore usable by the dedicated runtime user.
+if [ "${1:-}" != "--run-as-appuser" ]; then
+  [ "$(id -u)" = "0" ] || fail "entrypoint must start as root to prepare /data"
+  mkdir -p /data || fail "cannot create /data"
+  chown 1001:1001 /data || fail "cannot set owner on /data"
+  chmod 0700 /data || fail "cannot secure /data"
+  if [ -e "$keystore_path" ] || [ -L "$keystore_path" ]; then
+    [ ! -L "$keystore_path" ] || fail "keystore path must not be a symlink: $keystore_path"
+    [ -f "$keystore_path" ] || fail "keystore path is not a regular file: $keystore_path"
+    # Preserve the encrypted bytes while restoring the permissions required by
+    # the non-root runtime user on a previously provisioned volume.
+    chown 1001:1001 "$keystore_path" || fail "cannot set owner on existing keystore: $keystore_path"
+    chmod 0600 "$keystore_path" || fail "cannot secure existing keystore: $keystore_path"
+  fi
+  exec su-exec 1001:1001 /app/entrypoint.sh --run-as-appuser
+fi
+
+[ "$(id -u)" = "1001" ] || fail "keystore bootstrap must run as UID 1001"
+[ "$(id -g)" = "1001" ] || fail "keystore bootstrap must run as GID 1001"
+[ -d /data ] || fail "/data does not exist"
+[ -w /data ] || fail "/data is not writable by UID 1001"
+
 # Keystore mode is intentionally the only production mode.  Treat even empty
 # raw-key variables as configuration errors so they cannot become a fallback.
 [ "${PROXY_SIGNER_MODE:-keystore}" = "keystore" ] || fail "PROXY_SIGNER_MODE must be keystore"
@@ -17,8 +44,9 @@ fail() {
 [ -n "${PROXY_KEYSTORE_PASSWORD:-}" ] || fail "PROXY_KEYSTORE_PASSWORD is required"
 export PROXY_SIGNER_MODE=keystore
 
-keystore_path=/data/proxy-keystore.json
+keystore_state=existing-preserved
 if [ ! -f "$keystore_path" ]; then
+  keystore_state=created
   [ -n "${PROXY_KEYSTORE_BOOTSTRAP_PRIVATE_KEY:-}" ] || fail "keystore is missing and PROXY_KEYSTORE_BOOTSTRAP_PRIVATE_KEY is not set"
   derived_address=$(/app/proxy-keystore bootstrap --path "$keystore_path") || fail "keystore initialization failed"
   [ "$(printf '%s' "$derived_address" | tr '[:upper:]' '[:lower:]')" = "$(printf '%s' "$PROXY_EXPECTED_SIGNER_ADDRESS" | tr '[:upper:]' '[:lower:]')" ] || fail "derived signer address does not match PROXY_EXPECTED_SIGNER_ADDRESS"
@@ -32,6 +60,8 @@ unset PROXY_KEYSTORE_BOOTSTRAP_PRIVATE_KEY
 # Validate the encrypted file and its signer before tee-proxy starts.  The
 # patched proxy repeats this validation when it loads the in-memory signer.
 derived_address=$(/app/proxy-keystore verify --path "$keystore_path" --expected-address "$PROXY_EXPECTED_SIGNER_ADDRESS") || fail "keystore validation failed"
+[ "$(stat -c '%a' "$keystore_path")" = "600" ] || fail "keystore mode must be 0600: $keystore_path"
+echo "proxy keystore volume ready: /data writable by 1001:1001; keystore=${keystore_state}; mode=0600" >&2
 
 cat > /app/config/config.toml <<CFG
 redis_port = "${REDIS_HOST}:${REDIS_PORT}"
