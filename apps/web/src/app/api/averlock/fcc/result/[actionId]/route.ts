@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { isHex, type Hex } from "viem";
 import { fetchActionResult, runPolicyHelper, verifiedLiveTee } from "@/lib/averlock/server-fcc";
-import { devError } from "@/lib/averlock/errors";
+import { devError, liveDependencyCode, liveDependencyMessage } from "@/lib/averlock/errors";
 
 export const runtime = "nodejs";
 export async function GET(request: Request, { params }: { params: Promise<{ actionId: string }> }) {
@@ -19,6 +19,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ acti
     return NextResponse.json(verified, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     devError("FCC result API", error);
-    return NextResponse.json({ error: "FCC result verification is temporarily unavailable." }, { status: 503, headers: { "Cache-Control": "no-store" } });
+    const code = liveDependencyCode(error) || "FCC_UNAVAILABLE";
+    return NextResponse.json({ error: liveDependencyMessage(code), code }, { status: 503, headers: { "Cache-Control": "no-store" } });
   }
 }

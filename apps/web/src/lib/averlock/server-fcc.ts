@@ -4,6 +4,7 @@ import path from "node:path";
 import { publicKeyToAddress } from "viem/accounts";
 import { contracts, fccConfig, publicClient } from "./config";
 import { teeManagerAbi } from "./contracts";
+import { liveDependencyError } from "./errors";
 import type { Address, Hex } from "viem";
 
 type TeeInfo = { teeInfo: { chainId: number; publicKey: { x: Hex; y: Hex } }; machineData: { extensionId: Hex; publicKey: { x: Hex; y: Hex } } };
@@ -11,25 +12,28 @@ type TeeInfo = { teeInfo: { chainId: number; publicKey: { x: Hex; y: Hex } }; ma
 function requiredProductionUrl(name: "AVERLOCK_FCC_PROXY_URL" | "AVERLOCK_FCC_RESULT_PROXY_URL", developmentFallback: string) {
   const value = process.env[name];
   if (value) return value;
-  if (process.env.NODE_ENV === "production") throw new Error(`${name} is required in production.`);
+  if (process.env.NODE_ENV === "production") throw liveDependencyError("FCC_UNAVAILABLE");
   return developmentFallback;
 }
 
 export async function verifiedLiveTee() {
   const publicProxyUrl = requiredProductionUrl("AVERLOCK_FCC_PROXY_URL", "https://crescentoid-earless-kelsi.ngrok-free.dev");
   const response = await fetch(`${publicProxyUrl.replace(/\/$/, "")}/info`, { cache: "no-store", signal: AbortSignal.timeout(12_000) });
-  if (!response.ok) throw new Error("FCC proxy information is unavailable.");
+  if (!response.ok) throw liveDependencyError("FCC_UNAVAILABLE");
   const info = await response.json() as TeeInfo;
-  if (info.teeInfo.chainId !== 114 || BigInt(info.machineData.extensionId) !== fccConfig.extensionId) throw new Error("FCC proxy is configured for the wrong chain or extension.");
-  if (info.teeInfo.publicKey.x !== info.machineData.publicKey.x || info.teeInfo.publicKey.y !== info.machineData.publicKey.y) throw new Error("FCC TEE public key mismatch.");
+  if (info.teeInfo.chainId !== 114 || BigInt(info.machineData.extensionId) !== fccConfig.extensionId) throw liveDependencyError("WRONG_NETWORK");
+  if (info.teeInfo.publicKey.x !== info.machineData.publicKey.x || info.teeInfo.publicKey.y !== info.machineData.publicKey.y) throw liveDependencyError("FCC_UNAVAILABLE");
   const publicKey = `0x04${info.teeInfo.publicKey.x.slice(2)}${info.teeInfo.publicKey.y.slice(2)}` as Hex;
   const tee = publicKeyToAddress(publicKey);
-  const [machine, status, extensionId] = await Promise.all([
-    publicClient.readContract({ address: contracts.teeManager, abi: teeManagerAbi, functionName: "getTeeMachine", args: [tee] }),
-    publicClient.readContract({ address: contracts.teeManager, abi: teeManagerAbi, functionName: "getTeeMachineStatus", args: [tee] }),
-    publicClient.readContract({ address: contracts.teeManager, abi: teeManagerAbi, functionName: "getExtensionId", args: [tee] }),
-  ]);
-  if (machine.teeId.toLowerCase() !== tee.toLowerCase() || status !== 2 || extensionId !== fccConfig.extensionId || machine.url.replace(/\/$/, "") !== publicProxyUrl.replace(/\/$/, "")) throw new Error("FCC TEE is not the registered PRODUCTION machine for this extension.");
+  let machine, status, extensionId;
+  try {
+    [machine, status, extensionId] = await Promise.all([
+      publicClient.readContract({ address: contracts.teeManager, abi: teeManagerAbi, functionName: "getTeeMachine", args: [tee] }),
+      publicClient.readContract({ address: contracts.teeManager, abi: teeManagerAbi, functionName: "getTeeMachineStatus", args: [tee] }),
+      publicClient.readContract({ address: contracts.teeManager, abi: teeManagerAbi, functionName: "getExtensionId", args: [tee] }),
+    ]);
+  } catch { throw liveDependencyError("RPC_UNAVAILABLE"); }
+  if (machine.teeId.toLowerCase() !== tee.toLowerCase() || status !== 2 || extensionId !== fccConfig.extensionId || machine.url.replace(/\/$/, "") !== publicProxyUrl.replace(/\/$/, "")) throw liveDependencyError("FCC_UNAVAILABLE");
   return { tee, publicKey: info.teeInfo.publicKey, machine };
 }
 

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { isHex } from "viem";
 import { runPolicyHelper, verifiedLiveTee } from "@/lib/averlock/server-fcc";
-import { devError } from "@/lib/averlock/errors";
+import { devError, liveDependencyCode, liveDependencyMessage } from "@/lib/averlock/errors";
 
 export const runtime = "nodejs";
 export async function POST(request: Request) {
@@ -13,6 +13,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ...prepared, tee: live.tee, extensionId: "65927" }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     devError("policy API", error);
-    return NextResponse.json({ error: "Private policy preparation is temporarily unavailable." }, { status: 503, headers: { "Cache-Control": "no-store" } });
+    const code = liveDependencyCode(error) || "FCC_UNAVAILABLE";
+    return NextResponse.json({ error: liveDependencyMessage(code), code }, { status: 503, headers: { "Cache-Control": "no-store" } });
   }
 }

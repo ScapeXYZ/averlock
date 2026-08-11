@@ -1,5 +1,14 @@
 import type { Address, Hex } from "viem";
 import type { PreparedPolicy } from "./validation";
+import type { LiveDependency } from "./errors";
+
+type ApiFailure = { error?: string; code?: LiveDependency };
+
+async function apiResult(response: Response) {
+  const result = await response.json() as ApiFailure;
+  if (!response.ok) throw new Error(result.code ? `AVERLOCK_DEPENDENCY:${result.code}` : result.error || "FCC request failed.");
+  return result;
+}
 
 export type PreparedEnvelope = { ruleId: Hex; policyCommitment: Hex; encryptedEnvelope: Hex; tee: Address; extensionId: string };
 export type VerifiedPolicyResult = { accepted: true; ruleId: Hex; policyCommitment: Hex; actionId: Hex; signatureValid: true };
@@ -8,9 +17,7 @@ export type ConfidentialVerification<T> = { status: ConfidentialVerificationStat
 
 export async function preparePrivatePolicy(policy: PreparedPolicy): Promise<PreparedEnvelope> {
   const response = await fetch("/api/averlock/fcc/policy", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ policy }), cache: "no-store" });
-  const result = await response.json();
-  if (!response.ok) throw new Error(result.error || "Private policy preparation failed.");
-  return result;
+  return await apiResult(response) as PreparedEnvelope;
 }
 
 /** FCC implementation boundary. Nothing outside this adapter needs tee-proxy details. */
@@ -24,9 +31,9 @@ export async function waitForPolicyResult(actionId: Hex, ruleId: Hex, commitment
   const url = `/api/averlock/fcc/result/${actionId}?ruleId=${ruleId}&commitment=${commitment}`;
   while (Date.now() < deadline) {
     const response = await fetch(url, { cache: "no-store" });
-    const result = await response.json();
-    if (response.ok && !result.pending) return result;
-    if (response.status !== 202) throw new Error(result.error || "FCC rejected the private policy.");
+    const result = await response.json() as ApiFailure & { pending?: boolean };
+    if (response.ok && !result.pending) return result as VerifiedPolicyResult;
+    if (response.status !== 202) throw new Error(result.code ? `AVERLOCK_DEPENDENCY:${result.code}` : result.error || "FCC rejected the private policy.");
     await new Promise((resolve) => setTimeout(resolve, 2_000));
   }
   throw new Error("The FCC policy result is still pending. The submitted transaction is safe to inspect before retrying verification.");
