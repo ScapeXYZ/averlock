@@ -1,0 +1,116 @@
+diff --git a/internal/server/internal.go b/internal/server/internal.go
+index 0260c2c..dbd6016 100644
+--- a/internal/server/internal.go
++++ b/internal/server/internal.go
+@@ -5,6 +5,7 @@ import (
+ 	"encoding/json"
+ 	"errors"
+ 	"fmt"
++	"net"
+ 	"net/http"
+ 	"sync"
+ 	"time"
+@@ -72,7 +73,9 @@ func NewInternal(port string,
+ 	liveness liveness,
+ 	m *metrics.Metrics,
+ ) *Internal {
+-	addr := fmt.Sprintf(":%s", port)
++	// Railway private networking can be IPv6-only. An explicit IPv6 wildcard
++	// is the platform-recommended dual-stack listener address.
++	addr := fmt.Sprintf("[::]:%s", port)
+ 
+ 	server := &http.Server{
+ 		Addr:              addr,
+@@ -98,8 +101,15 @@ func NewInternal(port string,
+ 
+ // Serve starts the server.
+ func (i *Internal) Serve() error {
+-	logger.Infof("serving internal at %s", i.server.Addr)
+-	return i.server.ListenAndServe()
++	listener, err := net.Listen("tcp", i.server.Addr)
++	if err != nil {
++		return err
++	}
++	// Log the kernel-resolved address, rather than only configured input, so
++	// Railway connectivity diagnosis can distinguish a bind failure from a
++	// routing failure. No request data or secrets are included.
++	logger.Infof("serving internal at %s", listener.Addr())
++	return i.server.Serve(listener)
+ }
+ 
+ // Close gracefully closes the server, then waits (bounded by ctx) for detached
+@@ -128,9 +138,12 @@ func (i *Internal) Close(ctx context.Context) error {
+ func (i *Internal) registerRoutes() {
+ 	mux := http.NewServeMux()
+ 
+-	mux.HandleFunc("POST /result", prepareHandler(i.resultH, maxResultBodySize, true))
+-	mux.HandleFunc("POST /queue/{queueID}", prepareHandler(i.queueH, noBody, true))
++	mux.Handle("POST /result", internalRequestDiagnostics(resultEndpoint, prepareHandler(i.resultH, maxResultBodySize, true)))
++	mux.Handle("POST /queue/{queueID}", internalRequestDiagnostics(queueEndpoint, prepareHandler(i.queueH, noBody, true)))
+ 
++	// /health is deliberately independent from startup/readiness checks. It is
++	// an immediate, internal-only transport probe for Railway connectivity.
++	mux.HandleFunc("GET /health", i.lHandlers.healthy)
+ 	mux.HandleFunc("GET /healthy", i.lHandlers.healthy)
+ 	mux.HandleFunc("GET /startup", i.lHandlers.startup)
+ 	mux.HandleFunc("GET /ready", i.lHandlers.ready)
+@@ -157,6 +170,38 @@ func (promErrorLogger) Println(v ...any) {
+ 	logger.Warnf("serving /metrics: %s", fmt.Sprint(v...))
+ }
+ 
++// internalRequestDiagnostics logs lifecycle boundaries for the node-facing
++// endpoints without recording request bodies, headers, query values, or IDs.
++func internalRequestDiagnostics(endpoint func(*http.Request) string, next http.Handler) http.Handler {
++	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		start := time.Now()
++		name := endpoint(r)
++		logger.Infof("internal request enter endpoint=%s method=%s", name, r.Method)
++		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
++		defer func() {
++			logger.Infof("internal request exit endpoint=%s method=%s status=%d duration=%s", name, r.Method, rec.status, time.Since(start))
++		}()
++		next.ServeHTTP(rec, r)
++	})
++}
++
++func resultEndpoint(*http.Request) string { return "/result" }
++
++// queueEndpoint only reports known endpoint names. It never logs arbitrary
++// request data in the invalid-queue case.
++func queueEndpoint(r *http.Request) string {
++	switch processorutils.QueueID(r.PathValue("queueID")) {
++	case processorutils.Direct:
++		return "/queue/direct"
++	case processorutils.Main:
++		return "/queue/main"
++	case processorutils.Backup:
++		return "/queue/backup"
++	default:
++		return "/queue/invalid"
++	}
++}
++
+ // resultH serves "/result" endpoint.
+ // It stores action response from the request body.
+ func (i *Internal) resultH(w http.ResponseWriter, r *http.Request) error {
+diff --git a/internal/server/internal_metrics_test.go b/internal/server/internal_metrics_test.go
+index b293566..e8693b8 100644
+--- a/internal/server/internal_metrics_test.go
++++ b/internal/server/internal_metrics_test.go
+@@ -11,6 +11,16 @@ import (
+ 	"github.com/flare-foundation/tee-proxy/internal/metrics"
+ )
+ 
++func TestInternalUsesRailwayDualStackAddressAndHealth(t *testing.T) {
++	i := NewInternal("6663", nil, nil, nil, &mockLiveness{ready: true, startup: true}, nil)
++	require.Equal(t, "[::]:6663", i.server.Addr)
++
++	rec := httptest.NewRecorder()
++	i.server.Handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
++	require.Equal(t, http.StatusOK, rec.Code)
++	require.Equal(t, "0", rec.Header().Get("Content-Length"))
++}
++
+ // TestMetricsRouteEnabled200 guards that NewInternal mounts /metrics when the metrics
+ // group is enabled, and that the exposed body carries series already recorded by
+ // instrumentHTTP for other requests served on the same handler.

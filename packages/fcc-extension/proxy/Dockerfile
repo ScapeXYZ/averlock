@@ -29,10 +29,12 @@ WORKDIR /app/tee-proxy
 COPY patches/keystore.patch /tmp/keystore.patch
 COPY patches/startup-cchain-sync-tolerance.patch /tmp/startup-cchain-sync-tolerance.patch
 COPY patches/redis-auth.patch /tmp/redis-auth.patch
+COPY patches/internal-listener-diagnostics.patch /tmp/internal-listener-diagnostics.patch
 COPY keystore/keystore.go keystore/keystore_test.go ./pkg/config/
 RUN patch -p1 < /tmp/keystore.patch && \
     patch -p1 < /tmp/startup-cchain-sync-tolerance.patch && \
     patch -p1 < /tmp/redis-auth.patch && \
+    patch -p1 < /tmp/internal-listener-diagnostics.patch && \
     go mod tidy
 RUN go mod download
 RUN go test ./pkg/config ./pkg/storage ./internal/proxy
