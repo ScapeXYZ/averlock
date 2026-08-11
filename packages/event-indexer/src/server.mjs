@@ -16,9 +16,14 @@ const number = (name, fallback) => {
 };
 const addresses = required("AVERLOCK_CONTRACT_ADDRESSES").split(",").map((value) => value.trim().toLowerCase());
 if (addresses.length < 2) throw new Error("AVERLOCK_CONTRACT_ADDRESSES must contain GuardManager then ProtectionVault");
+// Coston2 rejects eth_getLogs ranges greater than 30 blocks with JSON-RPC -32000.
+// Keep the environment setting as a throughput preference, but never emit an
+// incompatible request to this configured Coston2 RPC.
+const coston2MaxLogBlockRange = 30;
 const config = {
   startBlock: BigInt(required("AVERLOCK_START_BLOCK")), confirmations: number("AVERLOCK_CONFIRMATIONS", 12),
-  overlap: number("AVERLOCK_REORG_OVERLAP", 24), range: number("AVERLOCK_LOG_BLOCK_RANGE", 250),
+  overlap: number("AVERLOCK_REORG_OVERLAP", 24),
+  range: Math.min(Math.max(number("AVERLOCK_LOG_BLOCK_RANGE", coston2MaxLogBlockRange), 1), coston2MaxLogBlockRange),
   rpcUrl: required("AVERLOCK_RPC_URL"), dbPath: process.env.AVERLOCK_INDEXER_DB_PATH || "./data/averlock-events.sqlite",
 };
 mkdirSync(dirname(config.dbPath), { recursive: true });

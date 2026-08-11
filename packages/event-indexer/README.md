@@ -9,6 +9,10 @@ topic filters, and persists a minimal SQLite database: indexed events plus one c
 writes are idempotent on `(transaction_hash, log_index)`. The cursor is advanced only after a
 complete range is committed.
 
+Coston2 limits filtered `eth_getLogs` requests to 30 blocks. The indexer clamps
+`AVERLOCK_LOG_BLOCK_RANGE` to 30, so the service remains compatible even if an older Railway
+variable is still set to `250`.
+
 `AVERLOCK_CONFIRMATIONS` defaults to 12. Every run rewinds the persisted cursor by
 `AVERLOCK_REORG_OVERLAP` (default 24) before resuming, deletes only that overlap's derived
 events, and replays it. This makes short Coston2 reorgs safe without claiming the service is
@@ -22,4 +26,5 @@ Endpoints:
 - `GET /guards?owner=0x...` — receipt anchors for the Guards page.
 
 Run locally with `npm run start --workspace @averlock/event-indexer` after setting the variables
-in `.env.example`.
+in `.env.example`. Run `npm run test:coston2-rpc --workspace @averlock/event-indexer` to make a
+live one-block Coston2 compatibility request.
