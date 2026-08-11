@@ -36,12 +36,19 @@ RUN go mod download
 RUN go test ./pkg/config
 RUN CGO_ENABLED=0 GOOS=linux go build -a -o main ./cmd/proxy
 
+WORKDIR /app/keystore-bootstrap
+COPY go.mod go.sum ./
+COPY keystore-bootstrap/main.go ./
+RUN go mod download && \
+    CGO_ENABLED=0 GOOS=linux go build -a -o /app/proxy-keystore .
+
 # Final stage
 FROM alpine:3.21
 
 WORKDIR /app
 
 COPY --from=builder /app/tee-proxy/main .
+COPY --from=builder /app/proxy-keystore ./proxy-keystore
 RUN mkdir -p ./config
 COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh

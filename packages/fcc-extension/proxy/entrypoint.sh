@@ -1,9 +1,40 @@
 #!/bin/sh
 set -eu
 
+fail() {
+  echo "proxy keystore bootstrap: $*" >&2
+  exit 1
+}
+
+# Keystore mode is intentionally the only production mode.  Treat even empty
+# raw-key variables as configuration errors so they cannot become a fallback.
+[ "${PROXY_SIGNER_MODE:-keystore}" = "keystore" ] || fail "PROXY_SIGNER_MODE must be keystore"
+[ -z "${PROXY_PRIVATE_KEY+x}" ] || fail "PROXY_PRIVATE_KEY must be unset in keystore mode"
+[ -z "${PRIVATE_KEY+x}" ] || fail "PRIVATE_KEY must be unset in keystore mode"
+[ "${PROXY_EXPECTED_CHAIN_ID:?PROXY_EXPECTED_CHAIN_ID is required}" = "114" ] || fail "PROXY_EXPECTED_CHAIN_ID must be 114"
+[ -n "${PROXY_EXPECTED_SIGNER_ADDRESS:-}" ] || fail "PROXY_EXPECTED_SIGNER_ADDRESS is required"
+[ "${PROXY_KEYSTORE_PATH:-}" = "/data/proxy-keystore.json" ] || fail "PROXY_KEYSTORE_PATH must be /data/proxy-keystore.json"
+[ -n "${PROXY_KEYSTORE_PASSWORD:-}" ] || fail "PROXY_KEYSTORE_PASSWORD is required"
+export PROXY_SIGNER_MODE=keystore
+
+keystore_path=/data/proxy-keystore.json
+if [ ! -f "$keystore_path" ]; then
+  [ -n "${PROXY_KEYSTORE_BOOTSTRAP_PRIVATE_KEY:-}" ] || fail "keystore is missing and PROXY_KEYSTORE_BOOTSTRAP_PRIVATE_KEY is not set"
+  derived_address=$(/app/proxy-keystore bootstrap --path "$keystore_path") || fail "keystore initialization failed"
+  [ "$(printf '%s' "$derived_address" | tr '[:upper:]' '[:lower:]')" = "$(printf '%s' "$PROXY_EXPECTED_SIGNER_ADDRESS" | tr '[:upper:]' '[:lower:]')" ] || fail "derived signer address does not match PROXY_EXPECTED_SIGNER_ADDRESS"
+  # Log only the public address after initialization.
+  echo "$derived_address" >&2
+fi
+
+# Bootstrap material is never inherited by the long-running proxy process.
+unset PROXY_KEYSTORE_BOOTSTRAP_PRIVATE_KEY
+
+# Validate the encrypted file and its signer before tee-proxy starts.  The
+# patched proxy repeats this validation when it loads the in-memory signer.
+derived_address=$(/app/proxy-keystore verify --path "$keystore_path" --expected-address "$PROXY_EXPECTED_SIGNER_ADDRESS") || fail "keystore validation failed"
+
 cat > /app/config/config.toml <<CFG
 redis_port = "${REDIS_HOST}:${REDIS_PORT}"
-private_key_variable = "PROXY_PRIVATE_KEY"
 initial_signing_policy_offset = 2
 signing_policy_fetch_interval = "20s"
 

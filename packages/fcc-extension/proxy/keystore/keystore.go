@@ -28,7 +28,10 @@ var readInteractivePassword = func() ([]byte, error) {
 }
 
 func privateKeyFromKeystore(actualChainID uint64) (*ecdsa.PrivateKey, error) {
-	if strings.TrimSpace(os.Getenv("PROXY_PRIVATE_KEY")) != "" || strings.TrimSpace(os.Getenv("PRIVATE_KEY")) != "" {
+	if _, set := os.LookupEnv("PROXY_PRIVATE_KEY"); set {
+		return nil, errors.New("raw PROXY_PRIVATE_KEY/PRIVATE_KEY must be unset in keystore mode")
+	}
+	if _, set := os.LookupEnv("PRIVATE_KEY"); set {
 		return nil, errors.New("raw PROXY_PRIVATE_KEY/PRIVATE_KEY must be unset in keystore mode")
 	}
 	expectedChain, err := strconv.ParseUint(strings.TrimSpace(os.Getenv("PROXY_EXPECTED_CHAIN_ID")), 10, 64)
