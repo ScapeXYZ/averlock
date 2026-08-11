@@ -63,8 +63,25 @@ derived_address=$(/app/proxy-keystore verify --path "$keystore_path" --expected-
 [ "$(stat -c '%a' "$keystore_path")" = "600" ] || fail "keystore mode must be 0600: $keystore_path"
 echo "proxy keystore volume ready: /data writable by 1001:1001; keystore=${keystore_state}; mode=0600" >&2
 
+if [ -n "${REDIS_URL:-}" ]; then
+  case "$REDIS_URL" in
+    redis://*:*@*|rediss://*:*@*) ;;
+    redis://*|rediss://*) fail "REDIS_URL must include Redis credentials" ;;
+    *) fail "REDIS_URL must use the redis:// or rediss:// scheme" ;;
+  esac
+  redis_port=$REDIS_URL
+  echo "redis authentication configured" >&2
+else
+  : "${REDIS_HOST:?REDIS_HOST is required when REDIS_URL is unset}"
+  : "${REDIS_PORT:?REDIS_PORT is required when REDIS_URL is unset}"
+  redis_port="${REDIS_HOST}:${REDIS_PORT}"
+fi
+
+# Redis URLs contain credentials. Keep the generated runtime config readable
+# only by the dedicated proxy user.
+umask 077
 cat > /app/config/config.toml <<CFG
-redis_port = "${REDIS_HOST}:${REDIS_PORT}"
+redis_port = "${redis_port}"
 initial_signing_policy_offset = 2
 signing_policy_fetch_interval = "20s"
 

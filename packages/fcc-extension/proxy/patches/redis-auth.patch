@@ -1,0 +1,105 @@
+diff --git a/internal/proxy/proxy.go b/internal/proxy/proxy.go
+index dc289af..8075b4b 100644
+--- a/internal/proxy/proxy.go
++++ b/internal/proxy/proxy.go
+@@ -70,7 +70,10 @@ func Run(ctx context.Context, cfgPath string) {
+ 		logger.Panicf("initializing proxy signer: %v", err)
+ 	}
+ 
+-	redisClient := storage.NewClient(cfg.RedisPort)
++	redisClient, err := storage.NewClientFromAddress(cfg.RedisPort)
++	if err != nil {
++		logger.Panicf("initializing Redis client: %v", err)
++	}
+ 	defer func() {
+ 		if err := redisClient.Close(); err != nil {
+ 		}
+diff --git a/pkg/storage/redis.go b/pkg/storage/redis.go
+index 66c3577..69acf89 100644
+--- a/pkg/storage/redis.go
++++ b/pkg/storage/redis.go
+@@ -5,6 +5,7 @@ import (
+ 	"encoding/json"
+ 	"errors"
+ 	"fmt"
++	"strings"
+ 	"time"
+ 
+ 	"github.com/redis/go-redis/v9"
+@@ -19,8 +20,22 @@ type RedisStorage[T any] struct {
+ 
+ // NewClient creates a new Redis client connected to the given host.
+ func NewClient(host string) *redis.Client {
+-	return redis.NewClient(&redis.Options{
+-		Addr: host})
++	return redis.NewClient(&redis.Options{Addr: host})
++}
++
++// NewClientFromAddress creates a Redis client connected to a host:port or Redis URL.
++// Redis URLs support credentials, database selection, and TLS (rediss://).
++func NewClientFromAddress(address string) (*redis.Client, error) {
++	if strings.HasPrefix(address, "redis://") || strings.HasPrefix(address, "rediss://") {
++		opts, err := redis.ParseURL(address)
++		if err != nil {
++			// Do not return the parser error: it may contain the URL, including credentials.
++			return nil, errors.New("invalid Redis URL")
++		}
++		return redis.NewClient(opts), nil
++	}
++
++	return NewClient(address), nil
+ }
+ 
+ // NewRedisStorage creates a new RedisStorage with the Redis client and storing key prefix.
+diff --git a/pkg/storage/storage_test.go b/pkg/storage/storage_test.go
+index 4b1146d..5630004 100644
+--- a/pkg/storage/storage_test.go
++++ b/pkg/storage/storage_test.go
+@@ -3,6 +3,7 @@ package storage
+ import (
+ 	"context"
+ 	"errors"
++	"strings"
+ 	"testing"
+ 	"time"
+ 
+@@ -128,6 +129,39 @@ func TestStorage(t *testing.T) {
+ 	})
+ }
+ 
++func TestNewClientRedisURL(t *testing.T) {
++	c, err := NewClientFromAddress("rediss://default:password@redis.example:6380/3")
++	require.NoError(t, err)
++	t.Cleanup(func() { require.NoError(t, c.Close()) })
++
++	opts := c.Options()
++	require.Equal(t, "redis.example:6380", opts.Addr)
++	require.Equal(t, "default", opts.Username)
++	require.Equal(t, "password", opts.Password)
++	require.Equal(t, 3, opts.DB)
++	require.NotNil(t, opts.TLSConfig)
++}
++
++func TestNewClientHostPortFallback(t *testing.T) {
++	c, err := NewClientFromAddress("127.0.0.1:6379")
++	require.NoError(t, err)
++	t.Cleanup(func() { require.NoError(t, c.Close()) })
++
++	opts := c.Options()
++	require.Equal(t, "127.0.0.1:6379", opts.Addr)
++	require.Empty(t, opts.Username)
++	require.Empty(t, opts.Password)
++}
++
++func TestNewClientInvalidRedisURLDoesNotLeakCredentials(t *testing.T) {
++	const password = "redis-secret-must-not-appear"
++	_, err := NewClientFromAddress("redis://default:" + password + "@redis.example:6379/not-a-database")
++	require.Error(t, err)
++	require.Contains(t, err.Error(), "invalid Redis URL")
++	require.NotContains(t, err.Error(), password)
++	require.False(t, strings.Contains(err.Error(), "default:"))
++}
++
+ func TestClearDatabase(t *testing.T) {
+ 	mr := miniredis.RunT(t)
+ 	c := NewClient(mr.Addr())
