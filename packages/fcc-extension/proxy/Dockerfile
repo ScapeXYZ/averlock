@@ -30,14 +30,16 @@ COPY patches/keystore.patch /tmp/keystore.patch
 COPY patches/startup-cchain-sync-tolerance.patch /tmp/startup-cchain-sync-tolerance.patch
 COPY patches/redis-auth.patch /tmp/redis-auth.patch
 COPY patches/internal-listener-diagnostics.patch /tmp/internal-listener-diagnostics.patch
+COPY patches/tee-info-validation-diagnostics.patch /tmp/tee-info-validation-diagnostics.patch
 COPY keystore/keystore.go keystore/keystore_test.go ./pkg/config/
 RUN patch -p1 < /tmp/keystore.patch && \
     patch -p1 < /tmp/startup-cchain-sync-tolerance.patch && \
     patch -p1 < /tmp/redis-auth.patch && \
     patch -p1 < /tmp/internal-listener-diagnostics.patch && \
+    patch -p1 < /tmp/tee-info-validation-diagnostics.patch && \
     go mod tidy
 RUN go mod download
-RUN go test ./pkg/config ./pkg/storage ./internal/proxy
+RUN go test ./pkg/config ./pkg/storage ./internal/proxy ./internal/service/info
 RUN CGO_ENABLED=0 GOOS=linux go build -a -o main ./cmd/proxy
 
 WORKDIR /app/keystore-bootstrap

@@ -1,0 +1,126 @@
+diff --git a/internal/service/info/info.go b/internal/service/info/info.go
+index a92bcdd..a6a6756 100644
+--- a/internal/service/info/info.go
++++ b/internal/service/info/info.go
+@@ -188,24 +188,33 @@ func (s *Service) updateInfo(ctx context.Context, timeout time.Duration) (_ comm
+ 		s.metrics.InfoRefreshFailed("action_status")
+ 		return common.Hash{}, fmt.Errorf("TEE_INFO action failed: %s", response.Result.Log)
+ 	}
++	logger.Infof("TEE_INFO result accepted for decoding: action_id=%s tag=%s data_bytes=%d signature_bytes=%d",
++		response.Result.ID, response.Result.SubmissionTag, len(response.Result.Data), len(response.Signature))
+ 
+ 	var result types.TeeInfoResponse
+ 
+ 	err = json.Unmarshal(response.Result.Data, &result)
+ 	if err != nil {
++		logger.Errorf("TEE_INFO validation failed: stage=decode action_id=%s error=%v", response.Result.ID, err)
+ 		s.metrics.InfoRefreshFailed("unmarshal")
+ 		return common.Hash{}, fmt.Errorf("unmarshaling info response: %w", err)
+ 	}
+ 
++	logDecodedInfo(&result, challenge, s.attestationCfg)
++
+ 	if s.attestationCfg != nil {
++		logger.Info("TEE_INFO validation reached: stage=parse_public_key")
+ 		teeID, err := ParseTeeID(&result)
+ 		if err != nil {
++			logger.Errorf("TEE_INFO validation failed: stage=parse_public_key error=%v", err)
+ 			s.metrics.InfoRefreshFailed("parse_tee_id")
+ 			return common.Hash{}, fmt.Errorf("parsing tee ID: %w", err)
+ 		}
++		logger.Infof("TEE_INFO public key parsed: tee_id=%s", teeID)
+ 
+ 		signingHash, err := signing.NewPayload(signing.TEEActionResult, result.TeeInfo.ChainID, [32]byte(response.Result.Hash())).Hash()
+ 		if err != nil {
++			logger.Errorf("TEE_INFO validation failed: stage=build_signature_payload chain_id=%d error=%v", result.TeeInfo.ChainID, err)
+ 			s.metrics.InfoRefreshFailed("signing_hash")
+ 			return common.Hash{}, fmt.Errorf("computing signing hash: %w", err)
+ 		}
+@@ -214,10 +223,12 @@ func (s *Service) updateInfo(ctx context.Context, timeout time.Duration) (_ comm
+ 		if err != nil {
+ 			s.metrics.InfoRefreshFailed("verify_signature")
+ 			// set-site Warn: the alert pages on one occurrence, but Run() Debug-logs one-shot failures
+-			logger.Warnf("TEE info response signature verification failed: %v", err)
++			logger.Warnf("TEE_INFO validation failed: stage=verify_signature expected_tee_id=%s signature_bytes=%d error=%v", teeID, len(response.Signature), err)
+ 			return common.Hash{}, fmt.Errorf("verifying response signature: %w", err)
+ 		}
++		logger.Infof("TEE_INFO validation succeeded: stage=verify_signature tee_id=%s", teeID)
+ 
++		logger.Infof("TEE_INFO validation reached: stage=verify_attestation enabled=%t", s.attestationCfg.Enabled)
+ 		vErr := attestation.Verify(&result, challenge, s.attestationCfg)
+ 		if s.attestationCfg.Enabled {
+ 			res, reason := attestationOutcome(&result, vErr)
+@@ -234,6 +245,7 @@ func (s *Service) updateInfo(ctx context.Context, timeout time.Duration) (_ comm
+ 			s.metrics.InfoRefreshFailed("verify_attestation")
+ 			return common.Hash{}, fmt.Errorf("verifying attestation: %w", vErr)
+ 		}
++		logger.Infof("TEE_INFO validation succeeded: stage=verify_attestation enabled=%t", s.attestationCfg.Enabled)
+ 	}
+ 
+ 	s.Lock()
+@@ -244,10 +256,48 @@ func (s *Service) updateInfo(ctx context.Context, timeout time.Duration) (_ comm
+ 	}
+ 	*s.Latest = result
+ 	s.LastUpdated = time.Now()
++	logger.Infof("TEE_INFO accepted: extension_id=%s chain_id=%d", result.MachineData.ExtensionID, result.TeeInfo.ChainID)
+ 
+ 	return challenge, nil
+ }
+ 
++var expectedAverlockExtensionID = common.HexToHash("0x010187")
++
++// logDecodedInfo reports only public identity and structural fields. It deliberately
++// excludes signatures, attestation tokens, result data, and key coordinates.
++func logDecodedInfo(result *types.TeeInfoResponse, challenge common.Hash, cfg *attestation.Config) {
++	expectedChainID := uint64(0)
++	if cfg != nil {
++		expectedChainID = cfg.ChainID
++	}
++	logger.Infof("TEE_INFO decoded: extension_id=%s expected_extension_id=%s extension_id_match=%t chain_id=%d expected_chain_id=%d chain_id_match=%t challenge_match=%t machine_public_key_match=%t system_state=%x system_state_version=%s machine_state=%x machine_state_version=%s attestation_kind=%s data_signature_bytes=%d",
++		result.MachineData.ExtensionID,
++		expectedAverlockExtensionID,
++		result.MachineData.ExtensionID == expectedAverlockExtensionID,
++		result.TeeInfo.ChainID,
++		expectedChainID,
++		expectedChainID == 0 || result.TeeInfo.ChainID == expectedChainID,
++		result.TeeInfo.Challenge == challenge,
++		result.TeeInfo.PublicKey == result.MachineData.PublicKey,
++		[]byte(result.TeeInfo.State.SystemState),
++		result.TeeInfo.State.SystemStateVersion,
++		[]byte(result.TeeInfo.State.State),
++		result.TeeInfo.State.StateVersion,
++		attestationKind(result.Attestation),
++		len(result.DataSignature),
++	)
++}
++
++func attestationKind(value string) string {
++	if value == "magic_pass" {
++		return "simulated_magic_pass"
++	}
++	if value == "" {
++		return "empty"
++	}
++	return "token_present"
++}
++
+ // attestationOutcome maps a completed attestation verification to its bounded metric labels.
+ // An accepted magic_pass sentinel (nil error under AllowMagicPass) yields result "ok" with
+ // reason ReasonMagicPass, keeping it distinguishable from a genuine JWT pass; any error yields
+diff --git a/internal/service/info/info_test.go b/internal/service/info/info_test.go
+index facc8cd..4e000fb 100644
+--- a/internal/service/info/info_test.go
++++ b/internal/service/info/info_test.go
+@@ -66,6 +66,12 @@ func signedTeeInfoResponse(t *testing.T, key *ecdsa.PrivateKey, actionID common.
+ 	return ar
+ }
+ 
++func TestAttestationKindDoesNotExposeToken(t *testing.T) {
++	require.Equal(t, "empty", attestationKind(""))
++	require.Equal(t, "simulated_magic_pass", attestationKind("magic_pass"))
++	require.Equal(t, "token_present", attestationKind("header.payload.signature"))
++}
++
+ func TestInsertBlock(t *testing.T) {
+ 	db, _ := testutil.InMemoryDB(t, "choose")
+ 	err := db.AutoMigrate(&database.Block{})
