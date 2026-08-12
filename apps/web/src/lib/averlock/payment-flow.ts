@@ -1,6 +1,9 @@
 import { getAddress, stringToHex, type Address, type Hex } from "viem";
 import { contracts, coston2, fccConfig } from "./config";
 
+export const prepareGuardEvaluationGasLimit=500_000n;
+export function withPrepareGuardEvaluationGasLimit<const T extends object>(request:T){return {...request,gas:prepareGuardEvaluationGasLimit};}
+
 export type FdcPreparation = { payment:{hash:string;destination:string;deliveredDrops:string;validated:true;result:string};ruleId:Hex;abiEncodedRequest:Hex;requestFee:string;fdcHub:Address;knownRequestTransaction?:Hex };
 export type PublicProof = readonly [readonly Hex[], readonly [Hex,Hex,bigint,bigint,readonly [Hex,Address],readonly [bigint,bigint,string,Hex,Hex,Hex,bigint,bigint,bigint,bigint,boolean,Hex,boolean,bigint,number]]];
 export type VerifiedDecision = { signatureValid:true;actionId:Hex;submissionTag:string;status:number;data:Hex;signature:Hex;resultHash:Hex;tee:Address;extensionId:string;decision:{domain:Hex;ruleId:Hex;eventHash:Hex;triggered:boolean;protectedUsd18:string;protectBps:number;scheduleId:number;eventValueUsd18:string;evaluatedAt:number;nonce:string;resultExpiry:number} };

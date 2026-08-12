@@ -4,6 +4,7 @@ import path from "node:path";
 import { decodeAbiParameters, decodeFunctionData, getAddress, parseAbi, parseAbiParameters, stringToHex, type Address, type Hex } from "viem";
 import { contracts, publicClient } from "./config";
 import { guardManagerAbi } from "./contracts";
+import { knownRequestTransactionForPayment } from "./fdc-known-requests";
 import { validateXrplPayment } from "./xrpl-payment";
 import type { GuardRecord } from "./types";
 
@@ -13,7 +14,6 @@ const FDC_VERIFICATION = "0x906507E0B64bcD494Db73bd0459d1C667e14B933" as Address
 const VERIFIER = "https://fdc-verifiers-testnet.flare.network/verifier/xrp/XRPPayment/prepareRequest";
 const DA = "https://ctn2-data-availability.flare.network/api/v1/fdc/proof-by-request-round-raw";
 const XRPL_RPC = "https://s.altnet.rippletest.net:51234/";
-const knownRequests: Record<string, Hex> = { "56ca82b41fd8112bac53ee24db60b27a11a4d5c9b58d75808b485c8435cb19df": "0x3fb3b090c03929865627a1125ec28f84bea63761bde3cb60f323af592d6ca29c" };
 const hubAbi = parseAbi(["function requestAttestation(bytes data) payable", "function fdcRequestFeeConfigurations() view returns (address)"]);
 const feeAbi = parseAbi(["function getRequestFee(bytes data) view returns (uint256)"]);
 const registryAbi = parseAbi(["function getContractAddressByName(string name) view returns (address)"]);
@@ -38,7 +38,7 @@ export async function prepareFdc(ruleId: Hex, txHash: string) {
   const prepared = await verifier.json(); if (!verifier.ok || prepared.status !== "VALID" || typeof prepared.abiEncodedRequest !== "string") throw new Error("Flare verifier rejected this XRPL payment.");
   const feeConfig = await publicClient.readContract({ address: FDC_HUB, abi: hubAbi, functionName: "fdcRequestFeeConfigurations" });
   const requestFee = await publicClient.readContract({ address: feeConfig, abi: feeAbi, functionName: "getRequestFee", args: [prepared.abiEncodedRequest] });
-  return { payment, ruleId, abiEncodedRequest: prepared.abiEncodedRequest as Hex, requestFee: requestFee.toString(), fdcHub: FDC_HUB, knownRequestTransaction: knownRequests[payment.hash.toLowerCase()] };
+  return { payment, ruleId, abiEncodedRequest: prepared.abiEncodedRequest as Hex, requestFee: requestFee.toString(), fdcHub: FDC_HUB, knownRequestTransaction: knownRequestTransactionForPayment(payment.hash) };
 }
 export async function retrieveFdcProof(abiEncodedRequest: Hex, requestTransaction: Hex) {
   const [receipt, transaction] = await Promise.all([publicClient.getTransactionReceipt({ hash: requestTransaction }), publicClient.getTransaction({ hash: requestTransaction })]);
