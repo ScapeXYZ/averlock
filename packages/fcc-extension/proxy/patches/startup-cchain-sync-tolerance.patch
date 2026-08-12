@@ -10,7 +10,7 @@ index 97999e6..526f703 100644
 +	// Railway must keep the proxy process alive while the retained legacy C-chain
 +	// indexer catches up. This affects bootstrap only: /ready retains upstream's
 +	// 140-second C-chain freshness check, and no unsigned result is ever served.
-+	outOfSyncTolerance = 72 * time.Hour
++	outOfSyncTolerance = 168 * time.Hour
  	walletSyncPeriod   = 1 * time.Hour
  	shutdownTimeout    = 10 * time.Second
  )
