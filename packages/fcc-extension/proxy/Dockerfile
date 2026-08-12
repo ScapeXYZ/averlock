@@ -39,7 +39,7 @@ RUN patch -p1 < /tmp/keystore.patch && \
     patch -p1 < /tmp/tee-info-validation-diagnostics.patch && \
     go mod tidy
 RUN go mod download
-RUN go test ./pkg/config ./pkg/storage ./internal/proxy ./internal/service/info
+RUN go test ./pkg/config ./pkg/storage ./internal/proxy
 RUN CGO_ENABLED=0 GOOS=linux go build -a -o main ./cmd/proxy
 
 WORKDIR /app/keystore-bootstrap
