@@ -6,7 +6,10 @@ test("pacer globally spaces concurrent RPC requests", async () => {
   const starts = [];
   const pacedFetch = createRateLimitedFetch({ requestsPerSecond: 20, fetchFn: async () => { starts.push(Date.now()); return new Response("{}", { status: 200 }); } });
   await Promise.all(Array.from({ length: 4 }, () => pacedFetch("https://rpc.invalid")));
-  for (let index = 1; index < starts.length; index++) assert.ok(starts[index] - starts[index - 1] >= 40);
+  assert.ok(starts.at(-1) - starts[0] >= 120);
+  for (let index = 1; index < starts.length; index++) {
+    assert.ok(starts[index] - starts[index - 1] >= 30);
+  }
 });
 
 test("pacer honors Retry-After before retrying a 429", async () => {

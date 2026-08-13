@@ -38,13 +38,14 @@ export function BaseLanding() {
             of truth.
           </small>
         </div>
-        <aside
-          className="canva-slot"
-          aria-label="Reserved area for an AVERLOCK product illustration"
-        >
-          <span>AVERLOCK visual</span>
-          <strong>Canva integration area</strong>
-          <p>Reserved for the final Guard → Vault product illustration.</p>
+        <aside className="canva-slot" aria-label="AVERLOCK contract flow">
+          <span>Public on-chain protection</span>
+          <strong>Guard → Vault</strong>
+          <p>USDC protection on Base Sepolia. ETH is used only for gas.</p>
+          <div>
+            <b>84532</b>
+            <small>Base Sepolia</small>
+          </div>
         </aside>
       </section>
       <section id="how" className="landing-steps">
@@ -80,13 +81,14 @@ export function BaseLanding() {
       </section>
       <section className="diagram-slot">
         <div>
-          <p className="eyebrow">Product walkthrough</p>
+          <p className="eyebrow">Contract lifecycle</p>
           <h2>Guard → Trigger → Vault → Release</h2>
           <p>
-            A clean integration area for the final Canva-created system diagram.
+            Contract reads are authoritative. The optional event indexer supplies
+            discovery and history without controlling current state.
           </p>
         </div>
-        <span>External visual asset slot</span>
+        <span>USDC protection · ETH gas · BaseScan receipts</span>
       </section>
       <footer>
         <span>AVERLOCK</span>

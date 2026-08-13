@@ -23,6 +23,7 @@ export type BaseGuard = {
   positionId: bigint;
   guardType: number;
   state: number;
+  storedState: number;
   cooldown: bigint;
   releaseDuration: bigint;
   createdAt: bigint;
@@ -73,10 +74,19 @@ export async function discoverGuards(owner: Address) {
       warning:
         "Guard discovery is not configured. Showing only guards created in this browser.",
     };
-  const response = await fetch(
-    `${base.replace(/\/$/, "")}/guards?owner=${owner}`,
-    { cache: "no-store" },
-  );
+  let response: Response;
+  try {
+    response = await fetch(
+      `${base.replace(/\/$/, "")}/guards?owner=${owner}`,
+      { cache: "no-store", signal: AbortSignal.timeout(10_000) },
+    );
+  } catch {
+    return {
+      anchors: local,
+      warning:
+        "Guard discovery indexer is unreachable. Known guard IDs are still verified from Base Sepolia contracts.",
+    };
+  }
   if (!response.ok)
     return {
       anchors: local,
@@ -106,10 +116,21 @@ export async function discoverActivity(owner: Address) {
   const base = process.env.NEXT_PUBLIC_AVERLOCK_INDEXER_URL;
   const local = localAnchors(owner).map((item) => ({ transaction_hash: item.transactionHash, block_number: item.blockNumber, event_name: "GuardCreated", payload: { guardId: item.guardId } } satisfies ActivityAnchor));
   if (!base) return { items: local, warning: "Activity indexing is not configured. Showing confirmed creation receipts from this browser only." };
-  const response = await fetch(`${base.replace(/\/$/, "")}/activity?owner=${owner}`, { cache: "no-store" });
+  let response: Response;
+  try {
+    response = await fetch(`${base.replace(/\/$/, "")}/activity?owner=${owner}`, { cache: "no-store", signal: AbortSignal.timeout(10_000) });
+  } catch {
+    return { items: local, warning: "Activity indexer is unreachable. Current contract state remains available." };
+  }
   if (!response.ok) return { items: local, warning: "Activity indexing is temporarily unavailable." };
-  const body = await response.json() as { items?: ActivityAnchor[] };
-  return { items: body.items || [], warning: undefined };
+  const body = await response.json() as { items?: ActivityAnchor[]; sync?: { status?: string; lagBlocks?: string } };
+  const degraded = body.sync?.status && body.sync.status !== "healthy";
+  return {
+    items: body.items || [],
+    warning: degraded
+      ? `Activity indexer is ${body.sync?.status}${body.sync?.lagBlocks ? ` (${body.sync.lagBlocks} blocks behind)` : ""}. Current state is still read from contracts.`
+      : undefined,
+  };
 }
 export async function readGuard(id: bigint) {
   if (!deploymentConfigured)
@@ -128,7 +149,11 @@ export async function readGuard(id: bigint) {
       args: [id],
     }),
   ]);
-  return { ...(guard as BaseGuard), state: Number(state) };
+  return {
+    ...(guard as Omit<BaseGuard, "storedState">),
+    storedState: Number(guard.state),
+    state: Number(state),
+  };
 }
 export async function readWallet(owner: Address) {
   const discovered = await discoverGuards(owner);

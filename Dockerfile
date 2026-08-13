@@ -29,9 +29,7 @@ RUN npm run build
 FROM node:22-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production PORT=3000
-COPY --from=dependencies /app/node_modules ./node_modules
-COPY --from=build /app/package.json /app/package-lock.json ./
-COPY --from=build /app/apps/web/package.json ./apps/web/package.json
-COPY --from=build /app/apps/web/.next ./apps/web/.next
+COPY --from=build /app/apps/web/.next/standalone ./
+COPY --from=build /app/apps/web/.next/static ./apps/web/.next/static
 EXPOSE 3000
-CMD ["npm", "run", "start"]
+CMD ["node", "apps/web/server.js"]

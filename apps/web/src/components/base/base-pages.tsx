@@ -389,6 +389,8 @@ export function GuardDetailPage({ guardId }: { guardId: string }) {
     setError("");
     try {
       if (kind === "fund") {
+        if (getAddress(guard.owner) !== getAddress(address))
+          throw new Error("Only the guard owner can fund this guard.");
         const allowance = await basePublicClient.readContract({
           address: guard.asset,
           abi: baseErc20Abi,
@@ -396,16 +398,26 @@ export function GuardDetailPage({ guardId }: { guardId: string }) {
           args: [address, baseContracts.guardManager],
         });
         if (allowance < guard.amount) {
-          const approval = await writeContractAsync({
+          const approvalSimulation = await client.simulateContract({
             address: guard.asset,
             abi: baseErc20Abi,
             functionName: "approve",
             args: [baseContracts.guardManager, guard.amount],
-            chainId: baseSepolia.id,
+            account: address,
           });
-          await client.waitForTransactionReceipt({ hash: approval });
+          const approval = await writeContractAsync(approvalSimulation.request);
+          const approvalReceipt = await client.waitForTransactionReceipt({
+            hash: approval,
+          });
+          if (approvalReceipt.status !== "success")
+            throw new Error("USDC approval reverted.");
         }
       }
+      if (
+        kind === "deactivate" &&
+        getAddress(guard.owner) !== getAddress(address)
+      )
+        throw new Error("Only the guard owner can deactivate this guard.");
       const fn =
         kind === "fund"
           ? "fundGuard"
@@ -414,20 +426,14 @@ export function GuardDetailPage({ guardId }: { guardId: string }) {
             : kind === "deactivate"
               ? "deactivateGuard"
               : "completeGuard";
-      await client.simulateContract({
+      const simulation = await client.simulateContract({
         address: baseContracts.guardManager,
         abi: baseGuardManagerAbi,
         functionName: fn,
         args: [guard.id],
         account: address,
       });
-      const hash = await writeContractAsync({
-        address: baseContracts.guardManager,
-        abi: baseGuardManagerAbi,
-        functionName: fn,
-        args: [guard.id],
-        chainId: baseSepolia.id,
-      });
+      const hash = await writeContractAsync(simulation.request);
       const receipt = await client.waitForTransactionReceipt({ hash });
       if (receipt.status !== "success")
         throw new Error("The transaction reverted.");
@@ -489,12 +495,16 @@ export function GuardDetailPage({ guardId }: { guardId: string }) {
                     ? "Approve the exact amount and arm this guard. Once funded, it cannot be deactivated."
                     : guard.state === 2 || guard.state === 3
                       ? "Execution is permissionless once the cooldown has elapsed."
+                    : guard.storedState === 5 && guard.state === 6
+                      ? "The vault is fully claimed. Persist completion on the guard."
                       : guard.state === 5
                         ? "Funds are in the non-cancelable vault and release according to schedule."
                         : "No action is currently required."}
                 </p>
               </div>
-              {guard.state === 1 && (
+              {guard.state === 1 &&
+                address &&
+                getAddress(guard.owner) === getAddress(address) && (
                 <>
                   <button
                     className="secondary-button"
@@ -521,6 +531,15 @@ export function GuardDetailPage({ guardId }: { guardId: string }) {
                   {busy ? "Working…" : "Execute protection"}
                 </button>
               )}
+              {guard.storedState === 5 && guard.state === 6 && (
+                <button
+                  className="primary-button"
+                  disabled={!!busy}
+                  onClick={() => act("complete")}
+                >
+                  {busy ? "Working…" : "Complete guard"}
+                </button>
+              )}
               {guard.state === 5 && (
                 <Link className="primary-button" href="/vaults">
                   View vault
@@ -539,26 +558,25 @@ export function VaultsPage() {
   const { writeContractAsync } = useWriteContract();
   const client = usePublicClient({ chainId: baseSepolia.id });
   const [busy, setBusy] = useState<bigint>();
+  const [actionError, setActionError] = useState("");
   async function claim(id: bigint) {
     if (!address || !client) return;
     setBusy(id);
+    setActionError("");
     try {
-      await client.simulateContract({
+      const simulation = await client.simulateContract({
         address: baseContracts.protectionVault,
         abi: baseVaultAbi,
         functionName: "claim",
         args: [id],
         account: address,
       });
-      const hash = await writeContractAsync({
-        address: baseContracts.protectionVault,
-        abi: baseVaultAbi,
-        functionName: "claim",
-        args: [id],
-        chainId: baseSepolia.id,
-      });
-      await client.waitForTransactionReceipt({ hash });
+      const hash = await writeContractAsync(simulation.request);
+      const receipt = await client.waitForTransactionReceipt({ hash });
+      if (receipt.status !== "success") throw new Error("Claim reverted.");
       await refresh();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Claim stopped.");
     } finally {
       setBusy(undefined);
     }
@@ -571,6 +589,7 @@ export function VaultsPage() {
           title="Committed funds"
           body="Vault balances and claimable amounts are read directly from Base Sepolia."
         />
+        {actionError && <p className="base-error">{actionError}</p>}
         {!address ? (
           <State
             title="Connect your wallet"
@@ -610,6 +629,16 @@ export function VaultsPage() {
                     {formatUnits(x.locked, data.decimals)} locked ·{" "}
                     {formatUnits(x.claimable, data.decimals)} claimable
                   </p>
+                  <p>
+                    {Number(
+                      (x.position.claimed * 10_000n) /
+                        x.position.totalDeposited,
+                    ) / 100}
+                    % claimed · release ends{" "}
+                    {new Date(
+                      Number(x.position.endTimestamp) * 1_000,
+                    ).toLocaleString()}
+                  </p>
                 </div>
                 <button
                   className="primary-button"
@@ -631,12 +660,21 @@ export function ActivityPage() {
   const { address, chainId } = useAccount();
   const [items, setItems] = useState<Awaited<ReturnType<typeof discoverActivity>>["items"]>([]);
   const [warning, setWarning] = useState("");
+  const [loadedFor, setLoadedFor] = useState("");
   useEffect(() => {
-    if (address && chainId === baseSepolia.id)
-      discoverActivity(address).then((x) => {
-        setItems(x.items);
-        setWarning(x.warning || "");
-      });
+    if (address && chainId === baseSepolia.id) {
+      discoverActivity(address)
+        .then((x) => {
+          setItems(x.items);
+          setWarning(x.warning || "");
+          setLoadedFor(address);
+        })
+        .catch(() => {
+          setItems([]);
+          setWarning("Activity indexer returned an invalid response. Current contract state remains available.");
+          setLoadedFor(address);
+        });
+    }
   }, [address, chainId]);
   return (
     <Shell>
@@ -651,6 +689,11 @@ export function ActivityPage() {
           <State
             title="Connect your wallet"
             body="Activity is scoped to the connected owner."
+          />
+        ) : loadedFor.toLowerCase() !== address.toLowerCase() ? (
+          <State
+            title="Loading activity"
+            body="Reading confirmed AVERLOCK events from the optional indexer."
           />
         ) : !items.length ? (
           <State
@@ -719,6 +762,8 @@ export function SettingsPage() {
             value={chainId ? `${chainId}` : "Not connected"}
           />
           <Row label="Product network" value="Base Sepolia · 84532" />
+          <Row label="Gas token" value="ETH" />
+          <Row label="Supported protection asset" value="USDC · 6 decimals" />
           <Row
             label="RPC / contracts"
             value={deploymentConfigured ? rpc : "Not configured"}
@@ -781,9 +826,11 @@ export function CreateGuardPage() {
     releaseDays: "30",
   });
   const [meta, setMeta] = useState({
-    symbol: "approved token",
-    decimals: 18,
+    symbol: "USDC",
+    decimals: 6,
     balance: 0n,
+    approved: false,
+    loaded: false,
   });
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
@@ -806,11 +853,27 @@ export function CreateGuardPage() {
           functionName: "balanceOf",
           args: [address],
         }),
+        basePublicClient.readContract({
+          address: baseContracts.guardManager,
+          abi: baseGuardManagerAbi,
+          functionName: "isApprovedAsset",
+          args: [baseContracts.approvedToken],
+        }),
       ])
-        .then(([symbol, decimals, balance]) =>
-          setMeta({ symbol, decimals: Number(decimals), balance }),
+        .then(([symbol, decimals, balance, approved]) =>
+          setMeta({
+            symbol,
+            decimals: Number(decimals),
+            balance,
+            approved,
+            loaded: true,
+          }),
         )
-        .catch(() => setError("Approved-token metadata is unavailable."));
+        .catch(() =>
+          setError(
+            "USDC metadata or approved-asset status is unavailable from Base Sepolia.",
+          ),
+        );
   }, [address]);
   const amount = (() => {
     try {
@@ -831,7 +894,9 @@ export function CreateGuardPage() {
         BigInt(form.cooldownDays) * 86400n,
         BigInt(form.releaseDays) * 86400n,
       ] as const;
-      await client.simulateContract({
+      if (!meta.approved)
+        throw new Error("The configured USDC is not approved by GuardManager.");
+      const simulation = await client.simulateContract({
         address: baseContracts.guardManager,
         abi: baseGuardManagerAbi,
         functionName: "createGuard",
@@ -839,13 +904,7 @@ export function CreateGuardPage() {
         account: address,
       });
       setStatus("Confirm guard creation in your wallet…");
-      const hash = await writeContractAsync({
-        address: baseContracts.guardManager,
-        abi: baseGuardManagerAbi,
-        functionName: "createGuard",
-        args,
-        chainId: baseSepolia.id,
-      });
+      const hash = await writeContractAsync(simulation.request);
       setStatus("Waiting for Base Sepolia confirmation…");
       const receipt = await client.waitForTransactionReceipt({ hash });
       if (receipt.status !== "success")
@@ -999,7 +1058,14 @@ export function CreateGuardPage() {
               {status && <p className="base-status">{status}</p>}
               <button
                 className="primary-button"
-                disabled={!!status || amount <= 0n || amount > meta.balance}
+                disabled={
+                  !!status ||
+                  !meta.loaded ||
+                  !meta.approved ||
+                  meta.decimals !== 6 ||
+                  amount <= 0n ||
+                  amount > meta.balance
+                }
                 onClick={submit}
               >
                 Create Protection Guard

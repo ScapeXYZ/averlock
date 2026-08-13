@@ -10,7 +10,8 @@
     "build": "npm run build --workspace @averlock/web",
     "start": "npm run start --workspace @averlock/web",
     "lint": "npm run lint --workspace @averlock/web",
-    "typecheck": "npm run typecheck --workspace @averlock/web"
+    "typecheck": "npm run typecheck --workspace @averlock/web",
+    "check:base-sepolia": "node scripts/verify-base-sepolia.mjs"
   },
   "engines": {
     "node": ">=20.9.0"

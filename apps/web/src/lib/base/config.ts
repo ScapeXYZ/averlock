@@ -26,25 +26,41 @@ export const baseSepolia = defineChain({
   },
   testnet: true,
 });
+export const BASE_SEPOLIA_DEPLOYMENT_BLOCK = 45_438_094n;
+export const BASE_SEPOLIA_RPC_URL =
+  process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL || "https://sepolia.base.org";
+export const BASE_SEPOLIA_GUARD_MANAGER =
+  "0xB2d5B8a9dF91466F07fcBA92f334cb143197151d" as Address;
+export const BASE_SEPOLIA_PROTECTION_VAULT =
+  "0x5f7a95160A34e84B91e25903b69B8B378094a9B0" as Address;
+export const BASE_SEPOLIA_APPROVED_TOKEN =
+  "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as Address;
 const configuredAddress = (name: string) => {
   const value = process.env[name];
-  return value && isAddress(value) ? (value as Address) : zeroAddress;
+  if (!value) return undefined;
+  return isAddress(value) ? (value as Address) : zeroAddress;
 };
 export const baseContracts = {
-  guardManager: configuredAddress("NEXT_PUBLIC_BASE_GUARD_MANAGER"),
-  protectionVault: configuredAddress("NEXT_PUBLIC_BASE_PROTECTION_VAULT"),
-  approvedToken: configuredAddress("NEXT_PUBLIC_BASE_APPROVED_TOKEN"),
+  guardManager:
+    configuredAddress("NEXT_PUBLIC_BASE_GUARD_MANAGER") ??
+    BASE_SEPOLIA_GUARD_MANAGER,
+  protectionVault:
+    configuredAddress("NEXT_PUBLIC_BASE_PROTECTION_VAULT") ??
+    BASE_SEPOLIA_PROTECTION_VAULT,
+  approvedToken:
+    configuredAddress("NEXT_PUBLIC_BASE_APPROVED_TOKEN") ??
+    BASE_SEPOLIA_APPROVED_TOKEN,
 } as const;
 export const deploymentConfigured = Object.values(baseContracts).every(
   (address) => address !== zeroAddress,
 );
 export const basePublicClient = createPublicClient({
   chain: baseSepolia,
-  transport: http(baseSepolia.rpcUrls.default.http[0]),
+  transport: http(BASE_SEPOLIA_RPC_URL),
 });
 export const baseWagmiConfig = createConfig({
   chains: [baseSepolia],
   connectors: [injected()],
-  transports: { [baseSepolia.id]: http(baseSepolia.rpcUrls.default.http[0]) },
+  transports: { [baseSepolia.id]: http(BASE_SEPOLIA_RPC_URL) },
   ssr: true,
 });

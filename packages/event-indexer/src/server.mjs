@@ -2,7 +2,7 @@ import http from "node:http";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { createPublicClient, decodeEventLog, http as viemHttp, parseAbiItem } from "viem";
+import { createPublicClient, decodeEventLog, http as viemHttp, isAddress, parseAbiItem, zeroAddress } from "viem";
 import { createRateLimitedFetch, requestsPerSecond } from "./rpc-pacer.mjs";
 
 const required = (name) => {
@@ -20,7 +20,15 @@ let config;
 let configurationError;
 try {
   addresses = required("AVERLOCK_CONTRACT_ADDRESSES").split(",").map((value) => value.trim().toLowerCase());
-  if (addresses.length < 2) throw new Error("AVERLOCK_CONTRACT_ADDRESSES must contain GuardManager then ProtectionVault");
+  if (
+    addresses.length !== 2 ||
+    addresses.some((address) => !isAddress(address) || address === zeroAddress) ||
+    addresses[0] === addresses[1]
+  ) {
+    throw new Error(
+      "AVERLOCK_CONTRACT_ADDRESSES must contain exactly GuardManager then ProtectionVault as distinct non-zero addresses",
+    );
+  }
   config = {
     startBlock: BigInt(required("AVERLOCK_START_BLOCK")), confirmations: number("AVERLOCK_CONFIRMATIONS", 12),
     overlap: number("AVERLOCK_REORG_OVERLAP", 24),
@@ -127,7 +135,7 @@ const guardsForOwner = db.prepare("SELECT * FROM events WHERE owner = ? AND even
 const server = http.createServer((request, response) => {
   const url = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
   if (request.method !== "GET") return json(response, 405, { error: "Method not allowed" });
-  if (url.pathname === "/health") return json(response, lastError || configurationError ? 503 : 200, { ...syncStatus(), service: "averlock-event-indexer" });
+  if (url.pathname === "/health") return json(response, lastError || configurationError ? 503 : 200, { ...syncStatus(), service: "averlock-base-sepolia-event-indexer" });
   if (url.pathname === "/sync") return json(response, 200, syncStatus());
   const owner = url.searchParams.get("owner")?.toLowerCase();
   if ((url.pathname === "/activity" || url.pathname === "/guards") && !/^0x[0-9a-f]{40}$/.test(owner || "")) return json(response, 400, { error: "A valid owner address is required" });
