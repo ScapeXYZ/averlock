@@ -1,4 +1,3 @@
-import { CreateGuardFlow } from "@/components/guards/create-guard-flow";
-import { TopNav } from "@/components/dashboard/top-nav";
+import { CreateGuardPage } from "@/components/base/base-pages";
 
-export default function NewGuardPage() { return <div className="app-shell"><TopNav/><main className="guard-page"><CreateGuardFlow/></main></div>; }
+export default function NewGuardPage() { return <CreateGuardPage/>; }

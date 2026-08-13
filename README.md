@@ -1,5 +1,9 @@
 # AVERLOCK
 
+> **Base branch:** the active product target on `base/mainnet` is Base Sepolia. Base contracts live in `packages/contracts/src/base`, the Base web runtime in `apps/web/src/lib/base` and `apps/web/src/components/base`, and the narrow indexer follows the Base event schema. Historical Flare/Coston2 sources remain for reference and are not part of the normal Base product flow. See `docs/base-sepolia.md`.
+
+> **Base branch:** the active product target on `base/mainnet` is Base Sepolia. The Base contracts live in `packages/contracts/src/base`, the Base web runtime in `apps/web/src/lib/base` and `apps/web/src/components/base`, and the AVERLOCK-only indexer follows the Base event schema. Historical Flare/Coston2 sources remain in the repository for reference and are not part of the normal Base product flow. See `docs/base-sepolia.md`.
+
 ## Flare Summer Signal — Bounty 2: Confidential Compute Apps
 
 **AVERLOCK** is a programmable on-chain protection protocol deployed on **Flare Coston2**.

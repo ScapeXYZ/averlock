@@ -1,5 +1,5 @@
-import { ProtocolEntry } from "@/components/entry/protocol-entry";
+import { BaseLanding } from "@/components/base/base-landing";
 
 export default function Home() {
-  return <ProtocolEntry />;
+  return <BaseLanding />;
 }

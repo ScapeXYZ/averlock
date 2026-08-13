@@ -1,7 +1,7 @@
 # AVERLOCK event indexer
 
-This service indexes **only** the deployed AVERLOCK `GuardManager` and `ProtectionVault`
-events. It does not index Coston2 generally and is never a prerequisite for contract reads
+This service indexes **only** the deployed AVERLOCK `BaseGuardManager` and `BaseProtectionVault`
+events. It does not index Base generally and is never a prerequisite for contract reads
 or the web application's readiness.
 
 It starts at `AVERLOCK_START_BLOCK`, calls `eth_getLogs` with configured address and event
@@ -9,9 +9,7 @@ topic filters, and persists a minimal SQLite database: indexed events plus one c
 writes are idempotent on `(transaction_hash, log_index)`. The cursor is advanced only after a
 complete range is committed.
 
-Coston2 limits filtered `eth_getLogs` requests to 30 blocks. The indexer clamps
-`AVERLOCK_LOG_BLOCK_RANGE` to 30, so the service remains compatible even if an older Railway
-variable is still set to `250`.
+The filtered Base log range is configurable with `AVERLOCK_LOG_BLOCK_RANGE` and defaults to 2,000.
 
 All JSON-RPC calls share a global `AVERLOCK_RPC_REQUESTS_PER_SECOND` limiter (default `2`). A
 429 honors `Retry-After` when supplied, otherwise retries with exponential backoff and jitter;
@@ -20,7 +18,7 @@ or `healthy` explicitly.
 
 `AVERLOCK_CONFIRMATIONS` defaults to 12. Every run rewinds the persisted cursor by
 `AVERLOCK_REORG_OVERLAP` (default 24) before resuming, deletes only that overlap's derived
-events, and replays it. This makes short Coston2 reorgs safe without claiming the service is
+events, and replays it. This makes short Base reorgs safe without claiming the service is
 at the chain head.
 
 Endpoints:
@@ -31,5 +29,5 @@ Endpoints:
 - `GET /guards?owner=0x...` — receipt anchors for the Guards page.
 
 Run locally with `npm run start --workspace @averlock/event-indexer` after setting the variables
-in `.env.example`. Run `npm run test:coston2-rpc --workspace @averlock/event-indexer` to make a
-live one-block Coston2 compatibility request.
+in `.env.example`. Set `BASE_SEPOLIA_LIVE_RPC_TEST=1` and run
+`npm run test:base-rpc --workspace @averlock/event-indexer` for a live Base Sepolia request.

@@ -1,4 +1,3 @@
-import { TopNav } from "@/components/dashboard/top-nav";
-import { VaultsPage } from "@/components/vaults/vaults-page";
+import { VaultsPage } from "@/components/base/base-pages";
 
-export default function Page() { return <div className="app-shell"><TopNav/><VaultsPage/></div>; }
+export default function Page() { return <VaultsPage/>; }

@@ -1,4 +1,3 @@
-import { TopNav } from "@/components/dashboard/top-nav";
-import { VerifyPage } from "@/components/verify/verify-page";
+import { redirect } from "next/navigation";
 
-export default function Page() { return <div className="app-shell"><TopNav/><VerifyPage/></div>; }
+export default function Page() { redirect("/activity"); }

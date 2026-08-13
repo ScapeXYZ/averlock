@@ -3,8 +3,8 @@ import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "AVERLOCK — Protection Overview",
-  description: "Private protection rules, verified cross-chain and enforced on Flare.",
+  title: "AVERLOCK — Protection rules on Base",
+  description: "Rules that protect your funds and enforce financial discipline on Base.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
