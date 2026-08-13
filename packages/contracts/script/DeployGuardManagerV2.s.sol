@@ -9,6 +9,7 @@ import {GuardManager} from "../src/GuardManager.sol";
 import {ProtectionVault} from "../src/ProtectionVault.sol";
 import {XrpUsdPriceReader} from "../src/XrpUsdPriceReader.sol";
 import {XrplPaymentVerifier} from "../src/XrplPaymentVerifier.sol";
+import {IFlareTeeManager} from "../src/interfaces/IFlareTeeManager.sol";
 
 /// @notice Deploys only the Phase 6.3 GuardManager V2 replacement on Coston2.
 /// @dev Reuses the existing vault, reader, and verifier. It never deploys or mutates them.
@@ -18,11 +19,12 @@ contract DeployGuardManagerV2 is Script {
     address internal constant PRICE_READER = 0xf2F2bf463b0765729189DeBe4E22dCEd601A18d5;
     address internal constant PAYMENT_VERIFIER = 0x10B2419e526Dc860E85c2315536389FA0D1269DA;
     address internal constant FTEST_XRP = 0x0b6A3645c240605887a5532109323A3E12273dc7;
-    address internal constant V2_TEE = 0x1C2186F3c7573378445A51A9f3fAd2818e90F53a;
+    // This identity and URL are deliberately checked immediately before
+    // broadcasting.  GuardManager binds the URL hash immutably, so deploying
+    // against an unregistered or differently-addressed TEE is unrecoverable.
     address internal constant TEE_MANAGER = 0x1a9C4A0f9D76c0b1D91d22E24E573a9b377618aE;
     address internal constant TEE_PROXY = 0x8E4f5D2736B988D4e922b988FF89bcCde45C6f2f;
     uint256 internal constant EXTENSION_ID = 65927;
-    bytes32 internal constant TEE_URL_HASH = keccak256("https://crescentoid-earless-kelsi.ngrok-free.dev");
 
     address internal constant EXPECTED_FDC_VERIFICATION = 0x906507E0B64bcD494Db73bd0459d1C667e14B933;
     address internal constant EXPECTED_FTSO_V2 = 0xC4e9c78EA53db782E28f28Fdf80BaF59336B304d;
@@ -38,6 +40,7 @@ contract DeployGuardManagerV2 is Script {
     error DependencyMismatch(bytes32 dependency, address actual, address expected);
     error SourceIdMismatch(bytes32 actual);
     error InsufficientDeploymentBalance(uint256 actual, uint256 required);
+    error TeeRegistrationMismatch(bytes32 field);
 
     function run() external returns (GuardManager guardManager) {
         if (block.chainid != 114) revert WrongChain(block.chainid);
@@ -47,6 +50,23 @@ contract DeployGuardManagerV2 is Script {
         _requireCode(PRICE_READER);
         _requireCode(PAYMENT_VERIFIER);
         _requireCode(FTEST_XRP);
+        _requireCode(TEE_MANAGER);
+
+        // Both values are mandatory: binding an immutable manager to a stale
+        // TEE identity or temporary URL would be unrecoverable.
+        address tee = vm.envAddress("GUARD_MANAGER_TEE_ID");
+        string memory teeUrl = vm.envString("GUARD_MANAGER_TEE_URL");
+        bytes32 teeUrlHash = keccak256(bytes(teeUrl));
+        IFlareTeeManager.TeeMachine memory machine = IFlareTeeManager(TEE_MANAGER).getTeeMachine(tee);
+        if (machine.teeId != tee) revert TeeRegistrationMismatch("teeId");
+        if (machine.teeProxyId != TEE_PROXY) revert TeeRegistrationMismatch("teeProxyId");
+        if (keccak256(bytes(machine.url)) != teeUrlHash) revert TeeRegistrationMismatch("url");
+        if (IFlareTeeManager(TEE_MANAGER).getExtensionId(tee) != EXTENSION_ID) {
+            revert TeeRegistrationMismatch("extensionId");
+        }
+        if (IFlareTeeManager(TEE_MANAGER).getTeeMachineStatus(tee) != 2) {
+            revert TeeRegistrationMismatch("status");
+        }
 
         _requireAddress("FdcVerification", address(ContractRegistry.getFdcVerification()), EXPECTED_FDC_VERIFICATION);
         _requireAddress("FtsoV2", address(ContractRegistry.getTestFtsoV2()), EXPECTED_FTSO_V2);
@@ -77,7 +97,9 @@ contract DeployGuardManagerV2 is Script {
         console2.log("existing XrpUsdPriceReader", PRICE_READER);
         console2.log("existing XrplPaymentVerifier", PAYMENT_VERIFIER);
         console2.log("FTestXRP", FTEST_XRP);
-        console2.log("V2 TEE", V2_TEE);
+        console2.log("production TEE", tee);
+        console2.log("TEE URL", teeUrl);
+        console2.logBytes32(teeUrlHash);
         console2.log("XRP/USD priceUsd18", priceUsd18);
         console2.log("XRP/USD timestamp", priceTimestamp);
 
@@ -90,7 +112,7 @@ contract DeployGuardManagerV2 is Script {
             TEE_MANAGER,
             EXTENSION_ID,
             TEE_PROXY,
-            TEE_URL_HASH,
+            teeUrlHash,
             MAX_PRICE_AGE
         );
         vm.stopBroadcast();
@@ -101,6 +123,9 @@ contract DeployGuardManagerV2 is Script {
         require(address(guardManager.fxrp()) == FTEST_XRP, "FTestXRP wiring mismatch");
         require(guardManager.fxrpDecimals() == 6, "FTestXRP decimals mismatch");
         require(address(guardManager.teeManager()) == TEE_MANAGER, "TEE manager wiring mismatch");
+        require(guardManager.extensionId() == EXTENSION_ID, "extension wiring mismatch");
+        require(guardManager.expectedTeeProxy() == TEE_PROXY, "TEE proxy wiring mismatch");
+        require(guardManager.expectedTeeUrlHash() == teeUrlHash, "TEE URL wiring mismatch");
         require(guardManager.maxPriceAge() == MAX_PRICE_AGE, "price age wiring mismatch");
         require(guardManager.COSTON2_CHAIN_ID() == 114, "chain constant mismatch");
         require(guardManager.GUARD_RESULT_DOMAIN() == V2_RESULT_DOMAIN, "V2 domain mismatch");

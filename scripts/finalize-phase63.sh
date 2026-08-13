@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
-# One-shot Phase 6.3 finalization: obtain a snapshot-derived FCC authorization,
-# simulate approve+execute, broadcast only after simulation succeeds, then verify.
+# RETIRED: this script targets the old immutable GuardManager and contains a
+# broadcast step.  It is deliberately disabled so it cannot reuse the broken
+# guard or submit a transaction by accident. Use docs/clean-e2e-guard.md after
+# deploying the replacement GuardManager instead.
 set -euo pipefail
+
+echo "[phase63-final] retired: the old GuardManager/guard must not be reused; see docs/clean-e2e-guard.md" >&2
+exit 2
+
+# Historical implementation retained below for audit only; it is unreachable.
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 FCC_DIR="$ROOT_DIR/packages/fcc-extension"

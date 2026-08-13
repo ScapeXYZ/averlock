@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"net"
+	"testing"
+)
 
 func TestSafeProxyURL(t *testing.T) {
 	for _, tc := range []struct {
@@ -17,6 +20,17 @@ func TestSafeProxyURL(t *testing.T) {
 				t.Fatalf("safeProxyURL(%q) = %q, want %q", tc.raw, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestPrintableIPsSortedAndUnique(t *testing.T) {
+	got := formatIPs(printableIPs([]net.IPAddr{
+		{IP: net.ParseIP("fd00::2")},
+		{IP: net.ParseIP("10.0.0.2")},
+		{IP: net.ParseIP("fd00::2")},
+	}))
+	if got != "[10.0.0.2,fd00::2]" {
+		t.Fatalf("formatted IPs = %q", got)
 	}
 }
 

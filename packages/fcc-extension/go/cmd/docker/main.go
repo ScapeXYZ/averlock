@@ -36,6 +36,7 @@ func main() {
 	if err != nil {
 		logger.Fatalf("invalid Railway EXTENSION_ID: %v", err)
 	}
+	probeProxyConnectivity(envValue(teeEnv, "PROXY_URL"))
 	teeCmd := exec.Command("/app/tee-node")
 	teeCmd.Env = teeEnv
 	// The tee-node owns the queue workers. Keep its structured logs in the

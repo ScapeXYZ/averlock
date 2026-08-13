@@ -9,7 +9,9 @@ services:
     environment:
       - CHAIN_URL=${CHAIN_URL:-https://coston2-api.flare.network/ext/C/rpc}
       - COSTON2_RPC_URL=${CHAIN_URL:-https://coston2-api.flare.network/ext/C/rpc}
-      - AVERLOCK_GUARD_MANAGER=0x444947Aaa00aB3fddbeb6421244A160448E6B52D
+      # Required after the replacement deployment. This must never fall back
+      # to the retired GuardManager bound to the temporary ngrok URL.
+      - AVERLOCK_GUARD_MANAGER=${AVERLOCK_GUARD_MANAGER:?set the new GuardManager address}
       # Coston2 chain id. The node binds every signature to this value; it must
       # match the proxy's chain_id (114) and the on-chain registry, or signature
       # verification fails (InvalidTeePublicKeyOrSignature / proxy panic).

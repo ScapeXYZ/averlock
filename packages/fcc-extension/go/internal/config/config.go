@@ -19,7 +19,9 @@ const (
 	Coston2ChainID          = uint64(114)
 	ResultValiditySeconds   = uint64(600)
 	DefaultCoston2RPCURL    = "https://coston2-api.flare.network/ext/C/rpc"
-	ExpectedGuardManager    = "0x444947Aaa00aB3fddbeb6421244A160448E6B52D"
+	// A live FCC instance must be explicitly bound to the replacement manager.
+	// Never silently fall back to the retired manager after a replacement deploy.
+	ExpectedGuardManager    = "0x0000000000000000000000000000000000000000"
 	TimeoutShutdown         = 5 * time.Second
 )
 
@@ -41,7 +43,11 @@ func init() {
 			SignPort = parsed
 		}
 	}
-	if value := os.Getenv("COSTON2_RPC_URL"); value != "" {
+	// Railway's tee-node and the extension must use the same canonical chain
+	// variable. Retain COSTON2_RPC_URL only as a backward-compatible fallback.
+	if value := os.Getenv("CHAIN_URL"); value != "" {
+		Coston2RPCURL = value
+	} else if value := os.Getenv("COSTON2_RPC_URL"); value != "" {
 		Coston2RPCURL = value
 	}
 	if value := os.Getenv("AVERLOCK_GUARD_MANAGER"); value != "" {

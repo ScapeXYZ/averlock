@@ -14,7 +14,9 @@ export const coston2 = defineChain({
 });
 
 export const contracts = {
-  guardManager: publicAddress(process.env.NEXT_PUBLIC_AVERLOCK_GUARD_MANAGER, "0x444947Aaa00aB3fddbeb6421244A160448E6B52D"),
+  // Deployment is deliberately explicit. Falling back to the retired manager
+  // would direct a newly sealed policy to its immutable temporary-URL binding.
+  guardManager: publicAddress(process.env.NEXT_PUBLIC_AVERLOCK_GUARD_MANAGER, "0x0000000000000000000000000000000000000000"),
   protectionVault: publicAddress(process.env.NEXT_PUBLIC_AVERLOCK_PROTECTION_VAULT, "0xCcF6D8A6AA0F3799f6c9c6069289D4013aABF4Eb"),
   priceReader: publicAddress(process.env.NEXT_PUBLIC_AVERLOCK_PRICE_READER, "0xf2F2bf463b0765729189DeBe4E22dCEd601A18d5"),
   // These are immutable Coston2 deployment bindings. Keeping them in source prevents a
@@ -38,12 +40,12 @@ export const fccConfig = {
  * eth_getLogs to 30 blocks, so an unbounded browser-side discovery scan is not viable.
  */
 export const dashboardSelection = {
-  ruleId: (process.env.NEXT_PUBLIC_AVERLOCK_RULE_ID || "0x2a3a9591def2b67120f829c342d002de5e2def49ac0f4044a6be143071489400") as Hex,
-  eventHash: "0xc4d12008caea289e8809d9f2884522ed85aac29600e43d1f07a566c896514819" as Hex,
-  actionId: (process.env.NEXT_PUBLIC_AVERLOCK_ACTION_ID || "0x9dc08cf157b56885ffef6a30f5fc9ff56f74c3aad1b163844bba07a84ed74a63") as Hex,
-  positionId: BigInt(process.env.NEXT_PUBLIC_AVERLOCK_POSITION_ID || "1"),
-  registrationBlock: BigInt(process.env.NEXT_PUBLIC_AVERLOCK_REGISTRATION_BLOCK || "33660559"),
-  executionBlock: BigInt(process.env.NEXT_PUBLIC_AVERLOCK_EXECUTION_BLOCK || "33679021"),
+  ruleId: (process.env.NEXT_PUBLIC_AVERLOCK_RULE_ID || "0x0000000000000000000000000000000000000000000000000000000000000000") as Hex,
+  eventHash: (process.env.NEXT_PUBLIC_AVERLOCK_EVENT_HASH || "0x0000000000000000000000000000000000000000000000000000000000000000") as Hex,
+  actionId: (process.env.NEXT_PUBLIC_AVERLOCK_ACTION_ID || "0x0000000000000000000000000000000000000000000000000000000000000000") as Hex,
+  positionId: BigInt(process.env.NEXT_PUBLIC_AVERLOCK_POSITION_ID || "0"),
+  registrationBlock: BigInt(process.env.NEXT_PUBLIC_AVERLOCK_REGISTRATION_BLOCK || "0"),
+  executionBlock: BigInt(process.env.NEXT_PUBLIC_AVERLOCK_EXECUTION_BLOCK || "0"),
 } as const;
 
 // Optional public proof metadata. No placeholder values are supplied: absent historical

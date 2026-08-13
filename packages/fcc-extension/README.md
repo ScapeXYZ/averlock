@@ -61,7 +61,15 @@ FDC-derived XRP payment data, FTSOv2 valuation, GuardManager execution, and Prot
 
 ## Phase 5C public Coston2 evidence
 
-The current V2 ABI-capable simulated AVERLOCK TEE is registered as `0x1C2186F3c7573378445A51A9f3fAd2818e90F53a` under extension ID `0x10187` and reached manager status `2` (`PRODUCTION`). The deployed InstructionSender remains `0x530D307Cca3A01BfC9139934b3F5Fa1DA19E728D`, the current manager is `0x1a9C4A0f9D76c0b1D91d22E24E573a9b377618aE`, and the stable proxy is `https://crescentoid-earless-kelsi.ngrok-free.dev`. Live test tooling derives the TEE identity from `/info` and fails closed unless its manager record is `PRODUCTION`, belongs to extension `0x10187`, and records the same proxy URL. An explicitly supplied `TEE_ID` is preserved and cross-checked rather than overwritten by local configuration.
+The production AVERLOCK TEE is `0xbAd2a9e9c836efEB970B6B42A04208ee9B8d4E71`
+under extension ID `0x10187` (`65927`) and status `2` (`PRODUCTION`). The
+deployed InstructionSender remains `0x530D307Cca3A01BfC9139934b3F5Fa1DA19E728D`,
+the manager is `0x1a9C4A0f9D76c0b1D91d22E24E573a9b377618aE`, and the canonical
+proxy is `https://chic-essence-production.up.railway.app`. Live test tooling
+derives the TEE identity from `/info` and fails closed unless its manager record
+is `PRODUCTION`, belongs to extension `0x10187`, and records that exact URL. An
+explicitly supplied `TEE_ID` is preserved and cross-checked rather than
+overwritten by local configuration.
 
 The live encrypted rule used public rule ID `0x1d5827daad9855308e3e978b21ef93be877a98e182529f2a994f37aac837e802` and returned commitment `0xaeee3b2e12d7304fe80789c807781b01fd26b7255aafcc2afa6583467d345ca7`. Public action evidence:
 

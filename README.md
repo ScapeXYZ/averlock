@@ -43,7 +43,9 @@ contract-state reads continue to work.
 
 ### Coston2 deployments and Flare usage
 
-- GuardManager: `0x444947Aaa00aB3fddbeb6421244A160448E6B52D`
+- GuardManager: configure `NEXT_PUBLIC_AVERLOCK_GUARD_MANAGER` with the newly
+  deployed replacement address. The retired manager is intentionally not a
+  fallback because it is immutably bound to the former temporary proxy URL.
 - ProtectionVault: `0xCcF6D8A6AA0F3799f6c9c6069289D4013aABF4Eb`
 - XrpUsdPriceReader: `0xf2F2bf463b0765729189DeBe4E22dCEd601A18d5`
 - XrplPaymentVerifier: `0x10B2419e526Dc860E85c2315536389FA0D1269DA`

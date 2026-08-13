@@ -17,7 +17,7 @@ function requiredProductionUrl(name: "AVERLOCK_FCC_PROXY_URL" | "AVERLOCK_FCC_RE
 }
 
 export async function verifiedLiveTee() {
-  const publicProxyUrl = requiredProductionUrl("AVERLOCK_FCC_PROXY_URL", "https://crescentoid-earless-kelsi.ngrok-free.dev");
+  const publicProxyUrl = requiredProductionUrl("AVERLOCK_FCC_PROXY_URL", "https://chic-essence-production.up.railway.app");
   const response = await fetch(`${publicProxyUrl.replace(/\/$/, "")}/info`, { cache: "no-store", signal: AbortSignal.timeout(12_000) });
   if (!response.ok) throw liveDependencyError("FCC_UNAVAILABLE");
   const info = await response.json() as TeeInfo;
@@ -57,7 +57,7 @@ export async function runPolicyHelper(mode: "prepare" | "verify" | "verify-evalu
 }
 
 export async function fetchActionResult(actionId: Hex) {
-  const base = requiredProductionUrl("AVERLOCK_FCC_RESULT_PROXY_URL", "http://127.0.0.1:6674");
+  const base = requiredProductionUrl("AVERLOCK_FCC_RESULT_PROXY_URL", "https://chic-essence-production.up.railway.app");
   return fetch(`${base.replace(/\/$/, "")}/action/result/${actionId.slice(2)}?submissionTag=threshold`, { cache: "no-store", signal: AbortSignal.timeout(10_000) });
 }
 
