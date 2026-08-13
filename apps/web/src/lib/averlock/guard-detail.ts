@@ -77,13 +77,19 @@ export async function readGuardDetail(ruleId: Hex, anchor: GuardDetailAnchor = {
         if (!sameHex(raw.ruleId, guard.ruleId)) throw new Error("Guard snapshot rule binding mismatch.");
         snapshot = raw;
       }
-      // An indexed event hash can survive a reverted preparation transaction.
-      // Read the replay barrier independently so that an unconsumed event remains
-      // recoverable, while an unavailable replay read still fails closed in the UI.
-      eventConsumed = await withReadTimeout(client.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "isEventConsumed", args: [anchor.eventHash] }), "GuardManager.isEventConsumed");
     } catch (error) {
       if (error instanceof Error && /binding mismatch|transaction mismatch/.test(error.message)) throw error;
       optionalErrors.push("Evaluation snapshot unavailable");
+    }
+    // An indexed event hash can survive a reverted preparation transaction. The
+    // snapshot getter deliberately reverts when one was never stored, so this
+    // replay-barrier read must not share its failure boundary. An unavailable
+    // replay read remains undefined and therefore fails closed in the UI.
+    try {
+      eventConsumed = await withReadTimeout(client.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "isEventConsumed", args: [anchor.eventHash] }), "GuardManager.isEventConsumed");
+    } catch (error) {
+      if (error instanceof Error && /binding mismatch|transaction mismatch/.test(error.message)) throw error;
+      optionalErrors.push("Event replay status unavailable");
     }
   }
 

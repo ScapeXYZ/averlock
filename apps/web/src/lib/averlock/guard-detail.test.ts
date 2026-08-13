@@ -17,12 +17,14 @@ const guard: GuardRecord = { owner, ruleId, policyCommitment: commitment, monito
 const snapshot: EvaluationSnapshot = { ruleId, eventValueUsd18: 1_000n, priceUsd18: 1n, priceTimestamp: 10n, paymentTimestamp: 5n, preparedAt: 11n };
 const position: VaultPosition = { id: 1n, asset: contracts.ftestXrp, beneficiary: owner, totalDeposited: 700_000_000n, claimed: 0n, startTimestamp: 20n, endTimestamp: 30n, createdAt: 20n };
 
-type Options = { guard?: GuardRecord; executed?: boolean; notTriggered?: boolean; registrationFailure?: boolean; registrationCommitment?: Hex; position?: VaultPosition; snapshot?: EvaluationSnapshot };
+type Options = { guard?: GuardRecord; executed?: boolean; notTriggered?: boolean; registrationFailure?: boolean; registrationCommitment?: Hex; position?: VaultPosition; snapshot?: EvaluationSnapshot; snapshotFailure?: boolean; replayFailure?: boolean };
 function client(options: Options = {}) {
   const selectedGuard = options.guard || guard;
   return {
     getChainId: async () => 114,
     readContract: async ({ functionName }: { functionName: string }) => {
+      if (functionName === "getEvaluationSnapshot" && options.snapshotFailure) throw new Error("execution reverted: EvaluationSnapshotMissing");
+      if (functionName === "isEventConsumed" && options.replayFailure) throw new Error("RPC unavailable");
       const values: Record<string, unknown> = {
         getGuard: selectedGuard, protectionVault: contracts.protectionVault, paymentVerifier: contracts.paymentVerifier,
         priceReader: contracts.priceReader, fxrp: contracts.ftestXrp, extensionId: 65_927n, GUARD_RESULT_DOMAIN: domain,
@@ -51,11 +53,20 @@ describe("Guard detail reads", () => {
     const data = await readGuardDetail(ruleId, { owner }, client() as never);
     expect(data.status).toBe("active"); expect(data.position).toBeUndefined(); expect(data.lifecycle.every((stage) => stage.state === "waiting")).toBe(true);
   });
-  it("keeps Process XRP Payment available after a preparation reverted after indexing its event hash", async () => {
-    const noSnapshot = { ...snapshot, ruleId: `0x${"00".repeat(32)}` as Hex, preparedAt: 0n };
-    const data = await readGuardDetail(ruleId, { owner, eventHash }, client({ snapshot: noSnapshot }) as never);
+  it("keeps Process XRP Payment available when the production missing-snapshot getter reverts after preparation failed", async () => {
+    const productionRuleId = "0xee6d519a38097b2267f4591f20e2de61d3cdf71c3f5c5511540b98cb320517e2" as Hex;
+    const productionEventHash = "0x8017602483a40cdae4e91b79ec26f71385f2b30b624bd6424cfa23fb94eb982c" as Hex;
+    const productionOwner = "0x562E5F66b44c24E1E493c4601F53DfD23385365E" as Address;
+    const productionGuard = { ...guard, owner: productionOwner, ruleId: productionRuleId };
+    const data = await readGuardDetail(productionRuleId, { owner: productionOwner, eventHash: productionEventHash }, client({ guard: productionGuard, snapshotFailure: true }) as never);
     expect(data.snapshot).toBeUndefined(); expect(data.eventConsumed).toBe(false); expect(data.status).toBe("active");
-    expect(canProcessPayment({ status: data.status, eventHash: data.eventHash, eventConsumed: data.eventConsumed, connectedAddress: owner, owner, chainId: 114 })).toBe(true);
+    expect(data.optionalErrors).toContain("Evaluation snapshot unavailable");
+    expect(canProcessPayment({ status: data.status, eventHash: data.eventHash, eventConsumed: data.eventConsumed, connectedAddress: productionOwner, owner: productionOwner, chainId: 114 })).toBe(true);
+  });
+  it("fails closed when the replay-barrier RPC is unavailable even if the snapshot is unavailable too", async () => {
+    const data = await readGuardDetail(ruleId, { owner, eventHash }, client({ snapshotFailure: true, replayFailure: true }) as never);
+    expect(data.eventConsumed).toBeUndefined(); expect(data.optionalErrors).toContain("Event replay status unavailable");
+    expect(canProcessPayment({ status: data.status, eventHash: data.eventHash, eventConsumed: data.eventConsumed, connectedAddress: owner, owner, chainId: 114 })).toBe(false);
   });
   it("returns a complete executed guard and vault position", async () => {
     const data = await readGuardDetail(ruleId, executedAnchor, client({ executed: true }) as never);
