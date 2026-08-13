@@ -25,9 +25,8 @@ contract BaseGuardManagerTest is Test {
 
     function testCompleteCooldownProtectionFlow() public {
         vm.prank(owner);
-        uint256 guardId = manager.createGuard(
-            BaseGuardManager.GuardType.Cooldown, address(token), AMOUNT, 1 days, 30 days
-        );
+        uint256 guardId =
+            manager.createGuard(BaseGuardManager.GuardType.Cooldown, address(token), AMOUNT, 1 days, 30 days);
         vm.prank(owner);
         token.approve(address(manager), AMOUNT);
         vm.prank(owner);
@@ -53,9 +52,8 @@ contract BaseGuardManagerTest is Test {
 
     function testStablecoinGuardUsesSameBoundedLifecycle() public {
         vm.prank(owner);
-        uint256 id = manager.createGuard(
-            BaseGuardManager.GuardType.StablecoinProtection, address(token), 100e18, 0, 7 days
-        );
+        uint256 id =
+            manager.createGuard(BaseGuardManager.GuardType.StablecoinProtection, address(token), 100e18, 0, 7 days);
         vm.startPrank(owner);
         token.approve(address(manager), 100e18);
         manager.fundGuard(id);
@@ -109,9 +107,7 @@ contract BaseGuardManagerTest is Test {
         cooldown = uint64(bound(cooldown, 0, manager.MAX_COOLDOWN()));
         duration = uint64(bound(duration, manager.MIN_RELEASE_DURATION(), manager.MAX_RELEASE_DURATION()));
         vm.prank(owner);
-        uint256 id = manager.createGuard(
-            BaseGuardManager.GuardType.Cooldown, address(token), 1, cooldown, duration
-        );
+        uint256 id = manager.createGuard(BaseGuardManager.GuardType.Cooldown, address(token), 1, cooldown, duration);
         BaseGuardManager.Guard memory guard = manager.getGuard(id);
         assertEq(guard.cooldown, cooldown);
         assertEq(guard.releaseDuration, duration);

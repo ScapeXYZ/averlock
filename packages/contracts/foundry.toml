@@ -4,18 +4,22 @@ test = "test"
 script = "script"
 out = "out"
 libs = ["lib", "dependencies"]
+
 solc_version = "0.8.28"
 evm_version = "cancun"
+
 optimizer = true
 optimizer_runs = 200
+
 fs_permissions = [
-  { access = "read", path = "../fdc-scripts/data" },
-  { access = "read", path = "../fcc-extension/data" }
+    { access = "read", path = "../fdc-scripts/data" },
+    { access = "read", path = "../fcc-extension/data" }
 ]
+
 remappings = [
-  "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
-  "@flarenetwork/flare-periphery-contracts/=dependencies/flare-periphery-0.1.52/src/",
-  "forge-std/=lib/forge-std/src/"
+    "@openzeppelin/contracts/=dependencies/openzeppelin-contracts/contracts/",
+    "@flarenetwork/flare-periphery-contracts/=dependencies/flare-periphery-0.1.52/src/",
+    "forge-std/=dependencies/forge-std/src/",
 ]
 
 [dependencies]

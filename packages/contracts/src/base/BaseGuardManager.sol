@@ -16,8 +16,20 @@ contract BaseGuardManager is ReentrancyGuard {
     uint64 public constant MAX_RELEASE_DURATION = 365 days;
     uint64 public constant MAX_COOLDOWN = 365 days;
 
-    enum GuardState { Draft, Registered, Funded, Eligible, Executed, VaultActive, Completed, Deactivated }
-    enum GuardType { Cooldown, StablecoinProtection }
+    enum GuardState {
+        Draft,
+        Registered,
+        Funded,
+        Eligible,
+        Executed,
+        VaultActive,
+        Completed,
+        Deactivated
+    }
+    enum GuardType {
+        Cooldown,
+        StablecoinProtection
+    }
 
     struct Guard {
         uint256 id;
@@ -41,22 +53,37 @@ contract BaseGuardManager is ReentrancyGuard {
     mapping(address asset => bool approved) public isApprovedAsset;
 
     event GuardCreated(
-        uint256 indexed guardId, address indexed owner, address indexed asset, GuardType guardType,
-        uint256 amount, uint64 cooldown, uint64 releaseDuration, uint64 createdAt
+        uint256 indexed guardId,
+        address indexed owner,
+        address indexed asset,
+        GuardType guardType,
+        uint256 amount,
+        uint64 cooldown,
+        uint64 releaseDuration,
+        uint64 createdAt
     );
     event GuardFunded(
-        uint256 indexed guardId, address indexed owner, address indexed asset, uint256 amount,
-        uint64 fundedAt, uint64 eligibleAt
+        uint256 indexed guardId,
+        address indexed owner,
+        address indexed asset,
+        uint256 amount,
+        uint64 fundedAt,
+        uint64 eligibleAt
     );
     event GuardStateChanged(
-        uint256 indexed guardId, address indexed owner, GuardState previousState, GuardState newState,
-        uint64 changedAt
+        uint256 indexed guardId, address indexed owner, GuardState previousState, GuardState newState, uint64 changedAt
     );
     event GuardExecuted(
-        uint256 indexed guardId, address indexed owner, uint256 indexed positionId, address asset,
-        uint256 amount, uint64 executedAt
+        uint256 indexed guardId,
+        address indexed owner,
+        uint256 indexed positionId,
+        address asset,
+        uint256 amount,
+        uint64 executedAt
     );
-    event GuardCompleted(uint256 indexed guardId, address indexed owner, uint256 indexed positionId, uint64 completedAt);
+    event GuardCompleted(
+        uint256 indexed guardId, address indexed owner, uint256 indexed positionId, uint64 completedAt
+    );
     event GuardDeactivated(uint256 indexed guardId, address indexed owner, uint64 deactivatedAt);
 
     error ZeroAddress();
@@ -82,9 +109,10 @@ contract BaseGuardManager is ReentrancyGuard {
         }
     }
 
-    function createGuard(
-        GuardType guardType, address asset, uint256 amount, uint64 cooldown, uint64 releaseDuration
-    ) external returns (uint256 guardId) {
+    function createGuard(GuardType guardType, address asset, uint256 amount, uint64 cooldown, uint64 releaseDuration)
+        external
+        returns (uint256 guardId)
+    {
         if (!isApprovedAsset[asset]) revert AssetNotApproved(asset);
         if (amount == 0) revert ZeroAmount();
         if (cooldown > MAX_COOLDOWN) revert InvalidCooldown(cooldown);
@@ -94,10 +122,19 @@ contract BaseGuardManager is ReentrancyGuard {
         guardId = _nextGuardId++;
         uint64 createdAt = uint64(block.timestamp);
         _guards[guardId] = Guard({
-            id: guardId, owner: msg.sender, asset: asset, amount: amount, positionId: 0,
-            guardType: guardType, state: GuardState.Registered, cooldown: cooldown,
-            releaseDuration: releaseDuration, createdAt: createdAt, fundedAt: 0,
-            eligibleAt: 0, executedAt: 0
+            id: guardId,
+            owner: msg.sender,
+            asset: asset,
+            amount: amount,
+            positionId: 0,
+            guardType: guardType,
+            state: GuardState.Registered,
+            cooldown: cooldown,
+            releaseDuration: releaseDuration,
+            createdAt: createdAt,
+            fundedAt: 0,
+            eligibleAt: 0,
+            executedAt: 0
         });
         emit GuardCreated(guardId, msg.sender, asset, guardType, amount, cooldown, releaseDuration, createdAt);
         emit GuardStateChanged(guardId, msg.sender, GuardState.Draft, GuardState.Registered, createdAt);
@@ -153,8 +190,13 @@ contract BaseGuardManager is ReentrancyGuard {
         emit GuardDeactivated(guardId, guard.owner, uint64(block.timestamp));
     }
 
-    function getGuard(uint256 guardId) external view returns (Guard memory) { return _guard(guardId); }
-    function guardCount() external view returns (uint256) { return _nextGuardId - 1; }
+    function getGuard(uint256 guardId) external view returns (Guard memory) {
+        return _guard(guardId);
+    }
+
+    function guardCount() external view returns (uint256) {
+        return _nextGuardId - 1;
+    }
 
     function currentState(uint256 guardId) external view returns (GuardState) {
         Guard storage guard = _guard(guardId);

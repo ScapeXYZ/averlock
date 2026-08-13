@@ -133,7 +133,8 @@ contract BaseProtectionVault is ReentrancyGuard {
         if (block.timestamp <= position.startTimestamp) return 0;
         if (block.timestamp >= position.endTimestamp) return position.totalDeposited;
         return Math.mulDiv(
-            position.totalDeposited, block.timestamp - position.startTimestamp,
+            position.totalDeposited,
+            block.timestamp - position.startTimestamp,
             position.endTimestamp - position.startTimestamp
         );
     }
