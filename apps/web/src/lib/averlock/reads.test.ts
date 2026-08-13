@@ -52,6 +52,14 @@ describe("dashboard reads", () => {
     await expect(readDashboard(owner)).rejects.toThrow("EvaluationNotPrepared");
   });
 
+  it("treats a selector absent from the current GuardManager as no configured guard", async () => {
+    state.readContract.mockImplementation(async ({ functionName }: { functionName: string }) => {
+      if (functionName === "getGuard") throw Object.assign(new Error("execution reverted"), { data: "0xeb8b8ff7" });
+      return true;
+    });
+    await expect(readDashboard(owner)).resolves.toBeNull();
+  });
+
   it("isolates an optional RPC failure instead of rejecting core state", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     await expect(dashboardReadDiagnostics.optional("optional feed", async () => { throw new Error("RPC unavailable"); })).resolves.toBeUndefined();

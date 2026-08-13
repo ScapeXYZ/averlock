@@ -1,4 +1,4 @@
-import { getAddress, type Address } from "viem";
+import { getAddress, isHex, type Address } from "viem";
 import { contracts, dashboardSelection, publicClient } from "./config";
 import { erc20Abi, guardEvaluatedEvent, guardManagerAbi, guardPreparedEvent, guardRegisteredEvent, guardTriggeredEvent, priceReaderAbi, teeManagerAbi, vaultAbi } from "./contracts";
 import type { DashboardData, EvaluationSnapshot, GuardRecord, VaultPosition } from "./types";
@@ -13,20 +13,42 @@ async function optional<T>(label: string, read: () => Promise<T>): Promise<T | u
 
 const last = <T,>(items?: readonly T[]) => items?.length ? items[items.length - 1] : undefined;
 
+const configuredSelectorUnavailable = (error: unknown): boolean => {
+  const text = (value: unknown): string => {
+    if (!value || typeof value !== "object") return String(value ?? "");
+    const candidate = value as { message?: unknown; data?: unknown; raw?: unknown; cause?: unknown };
+    return [candidate.message, candidate.data, candidate.raw, candidate.cause ? text(candidate.cause) : ""].map(String).join(" ");
+  };
+  // GuardNotFound(bytes32) and EvaluationNotPrepared(bytes32). These mean the
+  // receipt-backed dashboard selectors are absent from this GuardManager, not
+  // that a live security check has failed.
+  return /0xeb8b8ff7|0x7a183986/i.test(text(error));
+};
+
 export async function readDashboard(owner: Address): Promise<DashboardData | null> {
   const { ruleId, eventHash, actionId, positionId, registrationBlock, executionBlock } = dashboardSelection;
 
+  // Avoid turning an invalid build-time selector into an RPC error screen.
+  if (![ruleId, eventHash, actionId].every((selector) => isHex(selector, { strict: true }) && selector.length === 66)) return null;
+
   // Required security state. Failure here correctly fails the dashboard closed.
-  const [chainId, guardRaw, snapshotRaw, eventConsumed, resultConsumed, managerTokenBalance, extensionId, resultDomain] = await Promise.all([
-    publicClient.getChainId(),
-    publicClient.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "getGuard", args: [ruleId] }),
-    publicClient.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "getEvaluationSnapshot", args: [eventHash] }),
-    publicClient.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "isEventConsumed", args: [eventHash] }),
-    publicClient.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "isResultConsumed", args: [actionId] }),
-    publicClient.readContract({ address: contracts.ftestXrp, abi: erc20Abi, functionName: "balanceOf", args: [contracts.guardManager] }),
-    publicClient.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "extensionId" }),
-    publicClient.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "GUARD_RESULT_DOMAIN" }),
-  ]);
+  let requiredState: readonly unknown[];
+  try {
+    requiredState = await Promise.all([
+      publicClient.getChainId(),
+      publicClient.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "getGuard", args: [ruleId] }),
+      publicClient.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "getEvaluationSnapshot", args: [eventHash] }),
+      publicClient.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "isEventConsumed", args: [eventHash] }),
+      publicClient.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "isResultConsumed", args: [actionId] }),
+      publicClient.readContract({ address: contracts.ftestXrp, abi: erc20Abi, functionName: "balanceOf", args: [contracts.guardManager] }),
+      publicClient.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "extensionId" }),
+      publicClient.readContract({ address: contracts.guardManager, abi: guardManagerAbi, functionName: "GUARD_RESULT_DOMAIN" }),
+    ]);
+  } catch (error) {
+    if (configuredSelectorUnavailable(error)) return null;
+    throw error;
+  }
+  const [chainId, guardRaw, snapshotRaw, eventConsumed, resultConsumed, managerTokenBalance, extensionId, resultDomain] = requiredState as [number, GuardRecord, EvaluationSnapshot, boolean, boolean, bigint, bigint, `0x${string}`];
   if (chainId !== 114) throw new Error(`Wrong RPC chain: expected 114, received ${chainId}`);
 
   const guard = guardRaw as GuardRecord;
