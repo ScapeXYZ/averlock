@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { keccak256, stringToHex, type Address, type Hex } from "viem";
 import { contracts } from "./config";
 import { isValidGuardRuleId, readGuardDetail } from "./guard-detail";
+import { canProcessPayment } from "./payment-flow";
 import type { EvaluationSnapshot, GuardRecord, VaultPosition } from "./types";
 
 const ruleId = `0x${"11".repeat(32)}` as Hex;
@@ -16,7 +17,7 @@ const guard: GuardRecord = { owner, ruleId, policyCommitment: commitment, monito
 const snapshot: EvaluationSnapshot = { ruleId, eventValueUsd18: 1_000n, priceUsd18: 1n, priceTimestamp: 10n, paymentTimestamp: 5n, preparedAt: 11n };
 const position: VaultPosition = { id: 1n, asset: contracts.ftestXrp, beneficiary: owner, totalDeposited: 700_000_000n, claimed: 0n, startTimestamp: 20n, endTimestamp: 30n, createdAt: 20n };
 
-type Options = { guard?: GuardRecord; executed?: boolean; notTriggered?: boolean; registrationFailure?: boolean; registrationCommitment?: Hex; position?: VaultPosition };
+type Options = { guard?: GuardRecord; executed?: boolean; notTriggered?: boolean; registrationFailure?: boolean; registrationCommitment?: Hex; position?: VaultPosition; snapshot?: EvaluationSnapshot };
 function client(options: Options = {}) {
   const selectedGuard = options.guard || guard;
   return {
@@ -25,7 +26,7 @@ function client(options: Options = {}) {
       const values: Record<string, unknown> = {
         getGuard: selectedGuard, protectionVault: contracts.protectionVault, paymentVerifier: contracts.paymentVerifier,
         priceReader: contracts.priceReader, fxrp: contracts.ftestXrp, extensionId: 65_927n, GUARD_RESULT_DOMAIN: domain,
-        getEvaluationSnapshot: snapshot, isEventConsumed: Boolean(options.executed), isResultConsumed: Boolean(options.executed),
+        getEvaluationSnapshot: options.snapshot || snapshot, isEventConsumed: Boolean(options.executed), isResultConsumed: Boolean(options.executed),
         getPosition: options.position || position, claimableAmount: 10n, remainingLockedAmount: 699_999_990n, isFullyVested: false,
       };
       return values[functionName];
@@ -49,6 +50,12 @@ describe("Guard detail reads", () => {
   it("returns a registered but not-triggered waiting state", async () => {
     const data = await readGuardDetail(ruleId, { owner }, client() as never);
     expect(data.status).toBe("active"); expect(data.position).toBeUndefined(); expect(data.lifecycle.every((stage) => stage.state === "waiting")).toBe(true);
+  });
+  it("keeps Process XRP Payment available after a preparation reverted after indexing its event hash", async () => {
+    const noSnapshot = { ...snapshot, ruleId: `0x${"00".repeat(32)}` as Hex, preparedAt: 0n };
+    const data = await readGuardDetail(ruleId, { owner, eventHash }, client({ snapshot: noSnapshot }) as never);
+    expect(data.snapshot).toBeUndefined(); expect(data.eventConsumed).toBe(false); expect(data.status).toBe("active");
+    expect(canProcessPayment({ status: data.status, eventHash: data.eventHash, eventConsumed: data.eventConsumed, connectedAddress: owner, owner, chainId: 114 })).toBe(true);
   });
   it("returns a complete executed guard and vault position", async () => {
     const data = await readGuardDetail(ruleId, executedAnchor, client({ executed: true }) as never);
