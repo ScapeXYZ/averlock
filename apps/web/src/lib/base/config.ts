@@ -8,6 +8,12 @@ import {
 } from "viem";
 import { createConfig } from "wagmi";
 import { injected } from "wagmi/connectors";
+import { Attribution } from "ox/erc8021";
+
+export const AVERLOCK_BUILDER_CODE = "bc_wxycqary";
+export const AVERLOCK_DATA_SUFFIX = Attribution.toDataSuffix({
+  codes: [AVERLOCK_BUILDER_CODE],
+});
 
 export const baseSepolia = defineChain({
   id: 84532,
@@ -62,5 +68,6 @@ export const baseWagmiConfig = createConfig({
   chains: [baseSepolia],
   connectors: [injected()],
   transports: { [baseSepolia.id]: http(BASE_SEPOLIA_RPC_URL) },
+  dataSuffix: AVERLOCK_DATA_SUFFIX,
   ssr: true,
 });
